@@ -36,7 +36,7 @@ const locationResolver = {
             
             try {
                const [municipios] = await connection.query(
-                    `   SELECT 0 AS idMunicipio, "Todas los municipios" AS nombre
+                    `   SELECT 0 AS idMunicipio, "Todos los municipios" AS nombre
                         UNION
                         SELECT idMunicipio, nombre FROM municipios;
                     `,
