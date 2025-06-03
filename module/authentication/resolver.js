@@ -21,15 +21,17 @@ const authenticationResolver = {
                     `   SELECT usuario, password FROM usuarios WHERE usuario = ? AND password = ? AND tipo = 3
                     `,[input.usuario, input.password]
                 );
-                
+
                 if(user.length > 0){
                     return {
                         token: createToken(user[0], process.env.SECRETA, '24H')
                     };
                 }else{
-                    return "";
+                    return {token: ""};
                 }
+                
             } catch (error) {
+                
                 throw new GraphQLError("Error al iniciar sesión",{
                     extensions:{
                         code: "BAD_REQUEST",
