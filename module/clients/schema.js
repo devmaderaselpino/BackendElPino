@@ -22,10 +22,28 @@ const clientsSchema = `#graphql
         idColonia: Int
     }
 
+    input ClientInput {
+        nombre: String
+        aPaterno: String
+        aMaterno: String
+        municipio: Int
+        colonia: Int
+        calle: String
+        numero_ext: String
+        celular: String
+        distinguido: Int
+        img_domicilio: String
+        descripcion: String
+    }
+
     type Query {
         getClientsByCollector: [Client]
         getClients(input:ClientsInput): [Client]
         getClient(idCliente:Int): Client
+    }
+    
+    type Mutation {
+        insertClient(input: ClientInput): [Client]
     }
     
 `

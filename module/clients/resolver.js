@@ -108,6 +108,65 @@ const clientResolver = {
             }
         },
     },
+    Mutation: {
+        insertClient: async(_,{ input }) => {
+            try {
+                
+                const { nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion } = input;
+
+                const [clients] = await connection.query(
+                    `   
+                        SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n 
+                            FROM clientes c
+                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                            INNER JOIN colonias co ON c.colonia = co.idColonia 
+                            WHERE c.nombre LIKE '%${nombre}%' AND c.aPaterno LIKE '%${aPaterno}%' AND c.aMaterno LIKE '%${aMaterno}%'
+                    `
+                );
+
+                if(clients.length > 0){
+                    console.log("Se encontraron coincidencias!");
+                    
+                    return clients;
+                }
+
+                const idCliente = await connection.execute(
+                    `
+                       INSERT INTO clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ?; 
+                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion]
+                );
+
+                return [ {
+                    idCliente: idCliente[0].insertId, 
+                    nombre,
+                    aPaterno,
+                    aMaterno,
+                    municipio,
+                    municipio_n: 'nombre',
+                    colonia,
+                    colonia_n: "colonia_nombre",
+                    calle,
+                    numero_ext,
+                    celular,
+                    distinguido,
+                    img_domicilio,
+                    descripcion
+                } ]
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando cliente.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+    }
     
 };
 
