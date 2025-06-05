@@ -166,6 +166,34 @@ const clientResolver = {
                 });
             }
         },
+        insertValidatedClient: async(_,{ input }) => {
+            console.log(input);
+            
+            try {
+                
+                const { nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion } = input;
+
+                const cliente = await connection.execute(
+                    `
+                       INSERT INTO clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ?; 
+                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion]
+                );
+
+                return "Cliente insertado";
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando cliente.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
     }
     
 };

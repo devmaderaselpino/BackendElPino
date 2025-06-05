@@ -44,6 +44,7 @@ const clientsSchema = `#graphql
     
     type Mutation {
         insertClient(input: ClientInput): [Client]
+        insertValidatedClient(input: ClientInput): String
     }
     
 `
