@@ -15,6 +15,8 @@ const clientsSchema = `#graphql
         distinguido: Int
         img_domicilio: String
         descripcion: String
+        fecha_reg: String
+        status: Int
     }
 
     input ClientsInput {
@@ -23,6 +25,7 @@ const clientsSchema = `#graphql
     }
 
     input ClientInput {
+        idCliente: Int
         nombre: String
         aPaterno: String
         aMaterno: String
@@ -45,6 +48,7 @@ const clientsSchema = `#graphql
     type Mutation {
         insertClient(input: ClientInput): [Client]
         insertValidatedClient(input: ClientInput): String
+        updateClient(input: ClientInput): String
     }
     
 `

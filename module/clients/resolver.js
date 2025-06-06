@@ -194,6 +194,34 @@ const clientResolver = {
                 });
             }
         },
+        updateClient: async(_,{ input }) => {
+            console.log(input);
+            
+            try {
+                
+                const { idCliente, nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion } = input;
+
+                const cliente = await connection.execute(
+                    `
+                       UPDATE clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ? WHERE idCliente = ?; 
+                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion, idCliente]
+                );
+
+                return "Cliente actualizado";
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando cliente.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
     }
     
 };
