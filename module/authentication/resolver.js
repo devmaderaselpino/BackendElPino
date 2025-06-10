@@ -4,8 +4,8 @@ import { GraphQLError } from "graphql";
 import "dotenv/config";
 
 const createToken = (user, secret, expiresIn) => {
-    //const {idUsuario, nombre, apellido_paterno, apellido_materno, fecha_nacimiento, correo, celular, ultima_sesion, idCliente, idProspecto} = user;
-    return jsonwebtoken.sign(user, secret,{expiresIn});
+    const {idUsuario, nombre} = user;
+    return jsonwebtoken.sign( { idUsuario, nombre }, secret,{ expiresIn });
 }
 
 const authenticationResolver = {
@@ -18,7 +18,7 @@ const authenticationResolver = {
         loginUser: async(_,{input}) => {
             try {
                 const [user] = await connection.query(
-                    `   SELECT usuario, password FROM usuarios WHERE usuario = ? AND password = ? AND tipo = 3
+                    `   SELECT idUsuario, nombre, usuario, password FROM usuarios WHERE usuario = ? AND password = ? AND tipo = 3
                     `,[input.usuario, input.password]
                 );
 

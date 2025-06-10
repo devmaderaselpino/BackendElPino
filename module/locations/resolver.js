@@ -37,7 +37,9 @@ const locationResolver = {
             try {
                const [colonias] = await connection.query(
                     `   
-                        SELECT idColonia, nombre, status FROM colonias;
+                        SELECT c.idColonia, c.nombre, m.nombre AS nombreMunicipio, c.STATUS 
+                            FROM colonias c
+                            INNER JOIN municipios m ON c.idMunicipio = m.idMunicipio;
                     `,
                 );
                 
@@ -54,6 +56,17 @@ const locationResolver = {
                 });
                 
             }
+        },
+        getColoniasPaginated: async (_, { skip = 0, limit = 10 }) => {
+            const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM colonias');
+            const [items] = await connection.query(`
+                SELECT c.idColonia, c.nombre, m.nombre AS nombreMunicipio, c.status
+                FROM colonias c
+                INNER JOIN municipios m ON c.idMunicipio = m.idMunicipio
+                LIMIT ? OFFSET ?
+            `, [limit, skip]);
+
+            return { total, items };
         },
         getColonia: async (_,{idColonia}) => {
            
