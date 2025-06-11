@@ -19,6 +19,11 @@ const clientsSchema = `#graphql
         status: Int
     }
 
+    type ClientsPaginated {
+        total: Int
+        items: [Client]
+    }
+
     input ClientsInput {
         idMunicipio: Int
         idColonia: Int
@@ -39,10 +44,18 @@ const clientsSchema = `#graphql
         descripcion: String
     }
 
+    input PaginatedInput {
+        idMunicipio: Int
+        idColonia: Int
+        skip: Int
+        limit: Int
+    }
+
     type Query {
         getClientsByCollector: [Client]
         getClients(input:ClientsInput): [Client]
         getClient(idCliente:Int): Client
+        getClientsPaginated(input: PaginatedInput) : ClientsPaginated
     }
     
     type Mutation {

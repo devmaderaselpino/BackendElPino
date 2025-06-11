@@ -20,6 +20,11 @@ const locationSchema = `#graphql
         items: [Colonia]
     }
 
+    type MunicipiosPaginated {
+        total: Int
+        items: [Municipio]
+    }
+
     input MunicipioInput {
         idMunicipio: Int 
         nombre: String
@@ -36,6 +41,7 @@ const locationSchema = `#graphql
         getColonias(filter: Int): [Colonia]
         getColoniasList: [Colonia]
         getColoniasPaginated(skip: Int = 0, limit: Int = 10): ColoniasPaginated
+        getMunicipiosPaginated(skip: Int = 0, limit: Int = 10): MunicipiosPaginated
         getColonia(idColonia: Int): Colonia
         getMunicipios: [Municipio]
         getMunicipiosList: [Municipio]

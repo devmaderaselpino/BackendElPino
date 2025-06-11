@@ -57,6 +57,15 @@ const locationResolver = {
                 
             }
         },
+        getMunicipiosPaginated: async (_, { skip = 0, limit = 10 }) => {
+            const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM municipios');
+            const [items] = await connection.query(`
+                SELECT idMunicipio, nombre, status FROM municipios
+                LIMIT ? OFFSET ?
+            `, [limit, skip]);
+
+            return { total, items };
+        },
         getColoniasPaginated: async (_, { skip = 0, limit = 10 }) => {
             const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM colonias');
             const [items] = await connection.query(`
