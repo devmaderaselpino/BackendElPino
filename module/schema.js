@@ -19,8 +19,11 @@ import salesSchema from "./sales/schema.js";
 import locationResolver from "./locations/resolver.js";
 import locationSchema from "./locations/schema.js";
 
-const typeDefs = mergeTypeDefs([authenticationSchema, clientsSchema, inventorySchema, paymentSchema, salesSchema, locationSchema]);
-const resolvers = mergeResolvers([authenticationResolver, clientResolver, inventoryResolver, paymentResolver, salesResolver, locationResolver]);
+import employeesResolver from "./employees/resolver.js";
+import employeeSchema from "./employees/schema.js";
+
+const typeDefs = mergeTypeDefs([authenticationSchema, clientsSchema, inventorySchema, paymentSchema, salesSchema, locationSchema, employeeSchema]);
+const resolvers = mergeResolvers([authenticationResolver, clientResolver, inventoryResolver, paymentResolver, salesResolver, locationResolver, employeesResolver]);
 
 const schema = makeExecutableSchema({
     typeDefs,
