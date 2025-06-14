@@ -3,42 +3,61 @@ import { GraphQLError } from "graphql";
 
 const inventoryResolver = {
     Query : {
-        getPendingInventoryR: async (_,{}) => {
+        getPendingInventory: async (_,{tipo}) => {
             try {
                 
-                const [pendingInventoryR] = await connection.query(
-                    `   
-                        SELECT SUM(min_stock - stock) AS pending_products
-                            FROM inventario_rosario
-                            WHERE stock < min_stock;
-                    `, []
-                );
+                if( tipo === 1 ) {
+                    const [pendingInventory] = await connection.query(
+                        `   
+                            SELECT SUM(stock) AS stock, 
+                                (SELECT SUM(min_stock - stock)
+                                FROM inventario_rosario
+                                WHERE stock < min_stock) AS productos_pendientes
+                                FROM inventario_rosario;
+                        `, []
+                    );
+
+                    return [
+                        {
+                            name: "Disponible",
+                            value: pendingInventory[0].stock,
+                            color: "#10b981",
+                            description: "Productos en stock",
+                        },
+                        {
+                            name: "Faltante",
+                            value: pendingInventory[0].productos_pendientes,
+                            color: "#ef4444",
+                            description: "Productos agotados",
+                        },
+                    ]
+                } else{
+                    const [pendingInventory] = await connection.query(
+                        `   
+                            SELECT SUM(stock) AS stock, 
+                                (SELECT SUM(min_stock - stock)
+                                FROM inventario_escuinapa
+                                WHERE stock < min_stock) AS productos_pendientes
+                                FROM inventario_escuinapa;
+                        `, []
+                    );
+
+                    return [
+                        {
+                            name: "Disponible",
+                            value: pendingInventory[0].stock,
+                            color: "#10b981",
+                            description: "Productos en stock",
+                        },
+                        {
+                            name: "Faltante",
+                            value: pendingInventory[0].productos_pendientes,
+                            color: "#ef4444",
+                            description: "Productos agotados",
+                        },
+                    ]
+                }
                 
-                return pendingInventoryR[0].pending_products;
-            } catch (error) {
-                console.log(error);
-                throw new GraphQLError("Error al obtener el inventario pendiente.",{
-                    extensions:{
-                        code: "BAD_REQUEST",
-                        http: {
-                            "status" : 400
-                        }
-                    }
-                });
-                
-            }
-        },
-        getPendingInventoryE: async (_,{}) => {
-            try {
-                const [pendingInventoryE] = await connection.query(
-                    `   
-                        SELECT SUM(min_stock - stock) AS pending_products
-                            FROM inventario_escuinapa
-                            WHERE stock < min_stock;
-                    `, []
-                );
-                
-                return pendingInventoryE[0].pending_products;
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error al obtener el inventario pendiente.",{

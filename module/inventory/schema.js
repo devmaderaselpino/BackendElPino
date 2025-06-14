@@ -1,8 +1,15 @@
 const inventorySchema = `#graphql
 
+    type InventarioPendiente {
+        name: String,
+        value: Int,
+        color: String,
+        description: String
+    }
+
     type Query {
-        getPendingInventoryR: Int
-        getPendingInventoryE: Int
+        getPendingInventory(tipo: Int): [InventarioPendiente]
+
     }
     
 `
