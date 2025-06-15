@@ -1,8 +1,15 @@
 const paymentSchema = `#graphql
 
-    type Query {
-        expiredPayments: Int
+    type TotalPayments {
+        month: String
+        amount: Float
+        color: String
     }
+
+    type Query {
+        getPayments(tipo: Int): [TotalPayments]
+    }
+    
     
 `
 export default paymentSchema;

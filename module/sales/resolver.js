@@ -4,16 +4,40 @@ import { GraphQLError } from "graphql";
 const salesResolver = {
     Query : {
        
-        sales: async (_,{}) => {
+        getSalesAmount: async (_,{ tipo }) => {
             try {
                 
-                const [sales] = await connection.query(
+                const [currentSales] = await connection.query(
                     `   
-                       SELECT COUNT(idVenta) AS currentSales FROM ventas WHERE DATE(fecha) = CURRENT_DATE();
-                    `, []
+                        SELECT IFNULL(SUM(total),0) AS total FROM ventas
+                            INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
+                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE()) AND YEAR(ventas.fecha) = YEAR(CURDATE())
+                    `, [tipo]
                 );
-                
-                return sales[0].currentSales;
+
+                const [lastSales] = await connection.query(
+                    `   	
+                        SELECT IFNULL(SUM(total),0) AS total FROM ventas
+                            INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
+                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE() - INTERVAL 1 MONTH)
+                            AND YEAR(ventas.fecha) = YEAR(CURDATE() - INTERVAL 1 MONTH)
+
+                    `, [tipo]
+                );
+
+                return [
+                    {
+                        month: "Mes Anterior",
+                        amount: lastSales[0].total,
+                        color: "#6b7280",
+                    },
+                    {
+                        month: "Mes Actual",
+                        amount: currentSales[0].total,
+                        color: "#10b981",
+                    },
+                ]
+
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error al obtener pagos adeudados.",{

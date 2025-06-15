@@ -4,17 +4,42 @@ import { GraphQLError } from "graphql";
 const paymentResolver = {
     Query : {
        
-        expiredPayments: async (_,{}) => {
+        getPayments: async (_,{ tipo }) => {
             try {
                 
-                const [payments] = await connection.query(
+                const [currentPayments] = await connection.query(
                     `   
-                        SELECT COUNT(idAbonoProgramado) AS expiredPayments 
-                            FROM abonos_programados WHERE fecha_programada < CURRENT_DATE() AND pagado = 0;
-                    `, []
+                        SELECT IFNULL(SUM(abono),0) total FROM abonos
+                            INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
+                            INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
+                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE()) AND YEAR(abonos.fecha_reg) = YEAR(CURDATE())
+                    `, [tipo]
                 );
-                
-                return payments[0].expiredPayments;
+
+                const [lastPayments] = await connection.query(
+                    `   	
+                        SELECT IFNULL(SUM(abono),0) total FROM abonos
+                            INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
+                            INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
+                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE() - INTERVAL 1 MONTH)
+                            AND YEAR(abonos.fecha_reg) = YEAR(CURDATE() - INTERVAL 1 MONTH)
+
+                    `, [tipo]
+                );
+
+                return [
+                    {
+                        month: "Mes Anterior",
+                        amount: lastPayments[0].total,
+                        color: "#6b7280",
+                    },
+                    {
+                        month: "Mes Actual",
+                        amount: currentPayments[0].total,
+                        color: "#10b981",
+                    },
+                ]
+
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error al obtener pagos adeudados.",{

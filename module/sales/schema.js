@@ -30,8 +30,14 @@ const salesSchema = `#graphql
         total_compras: Int
     }
 
+    type TotalSales {
+        month: String
+        amount: Float
+        color: String
+    }
+
     type Query {
-        sales: Int
+        getSalesAmount(tipo: Int): [TotalSales]
         getLastSaleByClient(idCliente: Int) : String
         getSalesByClient(input: SalesInput): [Sale]
         getClientStats(idCliente: Int): ClientStats
