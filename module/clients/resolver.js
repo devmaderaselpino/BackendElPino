@@ -53,63 +53,72 @@ const clientResolver = {
             }
         },
         getClientsPaginated: async (_,{input}) => {
-            
-            const {idMunicipio, idColonia, skip, limit} = input;
+            const { idMunicipio, idColonia, skip, limit, searchName } = input;
 
-            let where = "";
-            let and = "";
-            if((idMunicipio !== 0) || (idColonia !== 0)){
-                where = "WHERE";
-            }
+            let whereClauses = [];
 
-            if((idMunicipio !== 0) && (idColonia !== 0)){
-                and = "AND";
-            }
-            
-            let queryMunicipio = "";
-            if(idMunicipio !== 0){
-                queryMunicipio = `municipio = ${idMunicipio}`
+            if (idMunicipio !== 0) {
+                whereClauses.push(`c.municipio = ${idMunicipio}`);
             }
 
-            let queryColonia = "";
-            if(idColonia !== 0){
-                queryColonia = `colonia = ${idColonia}`
+            if (idColonia !== 0) {
+                whereClauses.push(`c.colonia = ${idColonia}`);
             }
+
+            if (searchName && searchName.trim() !== "") {
+                whereClauses.push(`CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) LIKE ?`);
+            }
+
+            const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
             try {
-                const [[{ total }]] = await connection.query(`   
-                    SELECT COUNT(*) as total
-                        FROM clientes c
-                        INNER JOIN municipios m ON c.municipio = m.idMunicipio
-                        INNER JOIN colonias co ON c.colonia = co.idColonia
-                        ${where} ${queryMunicipio} ${and} ${queryColonia}
-                `);
+                const params = [];
+                const countParams = [];
 
+                if (searchName && searchName.trim() !== "") {
+                    const likeSearch = `%${searchName}%`;
+                    params.push(likeSearch);
+                    countParams.push(likeSearch);
+                }
+
+                const [[{ total }]] = await connection.query(
+                    `
+                        SELECT COUNT(*) as total
+                            FROM clientes c
+                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                            INNER JOIN colonias co ON c.colonia = co.idColonia
+                            ${where}
+                    `,
+                    countParams
+                );
+
+                params.push(limit, skip);
                 const [items] = await connection.query(
-                    `   
+                    `
                         SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n 
                             FROM clientes c
                             INNER JOIN municipios m ON c.municipio = m.idMunicipio
                             INNER JOIN colonias co ON c.colonia = co.idColonia
-                            ${where} ${queryMunicipio} ${and} ${queryColonia}
+                            ${where}
                             LIMIT ? OFFSET ?
-                    `, [limit, skip]
+                    `,
+                    params
                 );
-                
+
                 return { total, items };
             } catch (error) {
                 console.log(error);
-                throw new GraphQLError("Error al obtener los clientes.",{
-                    extensions:{
+                throw new GraphQLError("Error al obtener los clientes.", {
+                    extensions: {
                         code: "BAD_REQUEST",
                         http: {
-                            "status" : 400
+                            status: 400
                         }
                     }
                 });
-                
             }
         },
+
         getClientsByCollector: async (_,{}) => {
             try {
                const [clients] = await connection.query(

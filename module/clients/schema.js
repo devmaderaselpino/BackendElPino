@@ -49,6 +49,7 @@ const clientsSchema = `#graphql
         idColonia: Int
         skip: Int
         limit: Int
+        searchName: String
     }
 
     type Query {
