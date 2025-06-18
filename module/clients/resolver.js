@@ -53,6 +53,7 @@ const clientResolver = {
             }
         },
         getClientsPaginated: async (_,{input}) => {
+  
             const { idMunicipio, idColonia, skip, limit, searchName } = input;
 
             let whereClauses = [];

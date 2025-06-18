@@ -38,8 +38,14 @@ const employeeSchema = `#graphql
         items: [User]
     }
 
+    input PaginatedInput {
+        skip: Int
+        limit: Int
+        searchName: String
+    }
+
     type Query {
-        getEmployeesPaginated(skip: Int = 0, limit: Int = 10): UsersPaginated
+        getEmployeesPaginated(input: PaginatedInput): UsersPaginated
         getEmployee(idUsuario: Int): User
     }
     
