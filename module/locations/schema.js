@@ -37,11 +37,17 @@ const locationSchema = `#graphql
         cp: Int
     }
 
+    input PaginatedInput {
+        skip: Int
+        limit: Int
+        searchName: String
+    }
+
     type Query {
         getColonias(filter: Int): [Colonia]
         getColoniasList: [Colonia]
-        getColoniasPaginated(skip: Int = 0, limit: Int = 10): ColoniasPaginated
-        getMunicipiosPaginated(skip: Int = 0, limit: Int = 10): MunicipiosPaginated
+        getColoniasPaginated(input: PaginatedInput): ColoniasPaginated
+        getMunicipiosPaginated(input: PaginatedInput): MunicipiosPaginated
         getColonia(idColonia: Int): Colonia
         getMunicipios: [Municipio]
         getMunicipiosList: [Municipio]

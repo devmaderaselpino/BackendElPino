@@ -58,31 +58,6 @@ const employeesResolver = {
                 });
             }
         },
-        // getEmployeesPaginated: async (_, { skip = 0, limit = 10 }) => {
-
-        //     try {
-        //         const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM usuarios');
-        //         const [items] = await connection.query(
-        //             `
-        //                 SELECT usr.idUsuario, usr.nombre, usr.aPaterno, usr.aMaterno, usr.tipo, usr.status
-        //                     FROM usuarios usr
-        //                     LIMIT ? OFFSET ?
-        //         `, [limit, skip]);
-
-        //         return { total, items };
-        //     } catch (error) {
-        //         console.log(error);
-        //         throw new GraphQLError("Error al obtener la colonia.",{
-        //             extensions:{
-        //                 code: "BAD_REQUEST",
-        //                 http: {
-        //                     "status" : 400
-        //                 }
-        //             }
-        //         });
-        //     }
-            
-        // },
         getEmployee: async (_, { idUsuario } ) => {
 
             try {

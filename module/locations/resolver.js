@@ -57,26 +57,118 @@ const locationResolver = {
                 
             }
         },
-        getMunicipiosPaginated: async (_, { skip = 0, limit = 10 }) => {
-            const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM municipios');
-            const [items] = await connection.query(`
-                SELECT idMunicipio, nombre, status FROM municipios
-                LIMIT ? OFFSET ?
-            `, [limit, skip]);
+        getMunicipiosPaginated: async (_,{ input }) => {
 
-            return { total, items };
-        },
-        getColoniasPaginated: async (_, { skip = 0, limit = 10 }) => {
-            const [[{ total }]] = await connection.query('SELECT COUNT(*) AS total FROM colonias');
-            const [items] = await connection.query(`
-                SELECT c.idColonia, c.nombre, m.nombre AS nombreMunicipio, c.status
-                FROM colonias c
-                INNER JOIN municipios m ON c.idMunicipio = m.idMunicipio
-                LIMIT ? OFFSET ?
-            `, [limit, skip]);
+            const { skip, limit, searchName } = input;
 
-            return { total, items };
+            let whereClauses = [];
+
+            if (searchName && searchName.trim() !== "") {
+                whereClauses.push(`nombre LIKE ?`);
+            }
+
+            const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+            try {
+
+                const params = [];
+                const countParams = [];
+
+                if (searchName && searchName.trim() !== "") {
+                    const likeSearch = `%${searchName}%`;
+                    params.push(likeSearch);
+                    countParams.push(likeSearch);
+                }
+                
+                const [[{ total }]] = await connection.query(
+                    `
+                        SELECT COUNT(*) AS total FROM municipios
+                        ${where}
+                    `, countParams
+                );
+
+                params.push(limit, skip);
+
+                const [items] = await connection.query(
+                    `
+                        SELECT idMunicipio, nombre, status FROM municipios
+                            ${where}
+                            LIMIT ? OFFSET ?
+                    `,
+                    params
+                );
+
+                return { total, items };
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener los municipios.", {
+                    extensions: {
+                        code: "BAD_REQUEST",
+                        http: {
+                            status: 400
+                        }
+                    }
+                });
+            }
         },
+
+        getColoniasPaginated: async (_,{ input }) => {
+
+            const { skip, limit, searchName } = input;
+
+            let whereClauses = [];
+
+            if (searchName && searchName.trim() !== "") {
+                whereClauses.push(`c.nombre LIKE ?`);
+            }
+
+            const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+            try {
+
+                const params = [];
+                const countParams = [];
+
+                if (searchName && searchName.trim() !== "") {
+                    const likeSearch = `%${searchName}%`;
+                    params.push(likeSearch);
+                    countParams.push(likeSearch);
+                }
+                
+                const [[{ total }]] = await connection.query(
+                    `
+                        SELECT COUNT(*) AS total FROM colonias c
+                        ${where}
+                    `, countParams
+                );
+
+                params.push(limit, skip);
+
+                const [items] = await connection.query(
+                    `
+                        SELECT c.idColonia, c.nombre, m.nombre AS nombreMunicipio, c.status
+                            FROM colonias c
+                            INNER JOIN municipios m ON c.idMunicipio = m.idMunicipio
+                            ${where}
+                            LIMIT ? OFFSET ?
+                    `,
+                    params
+                );
+
+                return { total, items };
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener las colonias.", {
+                    extensions: {
+                        code: "BAD_REQUEST",
+                        http: {
+                            status: 400
+                        }
+                    }
+                });
+            }
+        },
+        
         getColonia: async (_,{idColonia}) => {
            
             try {
