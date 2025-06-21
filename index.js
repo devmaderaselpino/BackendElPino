@@ -6,6 +6,7 @@ import { expressMiddleware } from "@apollo/server/express4";
 import http from 'http'
 import { ApolloServerPluginDrainHttpServer } from "@apollo/server/plugin/drainHttpServer";
 import cors from 'cors';
+import jsonwebtoken from 'jsonwebtoken';
 
 var usuario;
 

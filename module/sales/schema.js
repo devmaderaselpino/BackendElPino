@@ -36,11 +36,32 @@ const salesSchema = `#graphql
         color: String
     }
 
+    input ProductSale {
+        idProducto: Int
+        cantidad: Int
+        precio: Float
+    }
+
+    input NewSale {
+        total: Float
+        usuario_reg: Int
+        idCliente: Int
+        fecha: String
+        tipo: Int
+        productos: [ProductSale]
+        abono: Float
+        municipio: Int
+    }
+
     type Query {
         getSalesAmount(tipo: Int): [TotalSales]
         getLastSaleByClient(idCliente: Int) : String
         getSalesByClient(input: SalesInput): [Sale]
         getClientStats(idCliente: Int): ClientStats
+    }
+    
+    type Mutation {
+        insertSale(input: NewSale) : String
     }
     
 `

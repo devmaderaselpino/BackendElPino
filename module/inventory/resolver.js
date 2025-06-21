@@ -70,7 +70,83 @@ const inventoryResolver = {
                 });
                 
             }
-        }
+        },
+        getCategories: async (_,{  }) => {
+            try {
+                
+                const [categorias] = await connection.query(
+                    `   
+                        SELECT 0 AS idCategoria, "Todas" AS descripcion
+                            UNION
+                            SELECT * FROM categorias
+                    `, []
+                );
+ 
+                return categorias;
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener las categorías.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
+        getProducts: async (_,{ categoria, municipio }) => {
+
+            let where = "";
+
+            if(categoria !== 0){
+                where = `AND p.categoria = ${categoria}`
+            }
+
+            try {
+                if(municipio === 1 ){
+                   
+                    const [productos] = await connection.query(
+
+                        `   
+                            SELECT p.*, ir.stock 
+                                FROM productos p
+                                INNER JOIN inventario_rosario ir ON p.idProducto = ir.idProducto
+                                WHERE ir.stock > 0 ${where}
+                        `,
+                    );
+
+                    return productos;
+                    
+                }else{
+
+                    const [productos] = await connection.query(
+
+                        `   
+                            SELECT p.*, ie.stock 
+                                FROM productos p
+                                INNER JOIN inventario_escuinapa ie ON p.idProducto = ie.idProducto
+                                WHERE ie.stock > 0 ${where}
+                        `,
+                    );
+
+                    return productos;
+                }
+ 
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener las categorías.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
     },
     
 };

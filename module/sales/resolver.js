@@ -5,6 +5,7 @@ const salesResolver = {
     Query : {
        
         getSalesAmount: async (_,{ tipo }) => {
+            
             try {
                 
                 const [currentSales] = await connection.query(
@@ -141,6 +142,90 @@ const salesResolver = {
             return products;
         },
     },
+    Mutation : {
+        insertSale: async(_,{ input }, ctx) => {
+
+            try {
+                let status = 1;
+
+                const { total, idCliente, fecha, tipo, productos, abono, municipio} = input;
+
+                if(tipo === 1){
+                    status = 0;
+                }
+
+                const venta = await connection.execute(
+                    `
+                       INSERT INTO ventas SET total = ?, usuario_reg = ?, idCliente = ?, fecha = NOW(), tipo = ?, status = ?; 
+                    `,[total, ctx.usuario.idUsuario, idCliente, tipo, status]
+                );
+
+                for(const producto of productos){
+                    
+                    const productosVenta = await connection.execute(
+                        `
+                           INSERT INTO productos_venta SET idVenta = ?, idProducto = ?, cantidad = ?, precio = ?; 
+                        `,[venta[0].insertId, producto.idProducto, producto.cantidad, producto.precio]
+                    
+                    );
+                }
+   
+                if(abono > 0 && tipo !== 1){
+                    const abonoI = await connection.execute(
+                        `
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 2; 
+                        `,[venta[0].insertId, abono, ctx.usuario.idUsuario]
+                        
+                    );
+                }
+
+                if(tipo === 1){
+                    const abonoI = await connection.execute(
+                        `
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 4; 
+                        `,[venta[0].insertId, total, ctx.usuario.idUsuario]
+                        
+                    );
+                }
+
+                if(municipio === 1){
+                    for(const producto of productos){
+                    
+                        const inventariosVenta = await connection.execute(
+                            `
+                            UPDATE inventario_rosario SET stock = (stock - ?) WHERE idProducto = ?; 
+                            `,[producto.cantidad, producto.idProducto]
+                        
+                        );
+                    }
+                }else if(municipio === 2){
+                    for(const producto of productos){
+                    
+                        const inventariosVenta = await connection.execute(
+                            `
+                            UPDATE inventario_escuinapa SET stock = (stock - ?) WHERE idProducto = ?; 
+                            `,[producto.cantidad, producto.idProducto]
+                        
+                        );
+                    }
+                }
+                
+                return "Se insertó mi pa."
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando venta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+    }
     
 };
 
