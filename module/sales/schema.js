@@ -20,6 +20,15 @@ const salesSchema = `#graphql
         getProducts: [SaleDetail]
     }
 
+    type Venta{
+        fecha: String!
+        articulos: String!
+        cliente: String!
+        total: Float!
+        tipo: String!
+        status:String!
+    }
+
     input SalesInput {
         idCliente: Int
         status: Int
@@ -58,6 +67,7 @@ const salesSchema = `#graphql
         getLastSaleByClient(idCliente: Int) : String
         getSalesByClient(input: SalesInput): [Sale]
         getClientStats(idCliente: Int): ClientStats
+        GetVentas: [Venta]
     }
     
     type Mutation {

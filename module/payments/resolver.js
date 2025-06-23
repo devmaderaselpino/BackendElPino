@@ -3,7 +3,6 @@ import { GraphQLError } from "graphql";
 
 const paymentResolver = {
     Query : {
-       
         getPayments: async (_,{ tipo }) => {
             try {
                 
@@ -53,6 +52,44 @@ const paymentResolver = {
                 
             }
         },
+        GetAbonos: async (_,{}) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                    SELECT 
+                        DATE_FORMAT(a.fecha_reg, '%Y-%m-%d') AS fecha,
+                        CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
+                        a.abono AS abono,
+                        CASE a.tipo
+                        WHEN 1 THEN 'Abono'
+                        WHEN 2 THEN 'Enganche'
+                        WHEN 3 THEN 'Apartado'
+                        END AS tipo_abono,
+                        u.nombre AS cobrador
+                        FROM abonos a
+                        JOIN usuarios u ON a.usuario_reg = u.idUsuario
+                        JOIN ventas v ON a.idVenta = v.idVenta
+                        JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE a.tipo IN (1, 2, 3)
+                        ORDER BY a.fecha_reg DESC;
+                    `, 
+                );
+                
+                return payments;
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener pagos adeudados.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        }
     },
     
 };

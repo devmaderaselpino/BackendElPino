@@ -6,8 +6,17 @@ const paymentSchema = `#graphql
         color: String
     }
 
+    type Abono {
+        fecha: String!
+        cliente: String!
+        abono: Float!
+        tipo_abono: String!
+        cobrador: String!
+    }
+
     type Query {
         getPayments(tipo: Int): [TotalPayments]
+        GetAbonos: [Abono]
     }
     
     

@@ -126,6 +126,51 @@ const salesResolver = {
                 
             }
         },
+        GetVentas: async (_,{}) => {
+            try {
+                
+                const [ventas] = await connection.query(
+                    `   SELECT 
+                            DATE_FORMAT(v.fecha, '%Y-%m-%d') AS fecha,
+                            GROUP_CONCAT(p.descripcion SEPARATOR ', ') AS articulos,
+                            CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
+                            v.total,
+                            CASE v.tipo
+                                WHEN 1 THEN 'contado'
+                                WHEN 2 THEN 'credito 6 meses'
+                                WHEN 3 THEN 'credito 12 meses'
+                                ELSE 'Otro'
+                            END AS tipo,
+                            CASE v.status
+                                WHEN 0 THEN 'Liquidada'
+                                WHEN 1 THEN 'Pendiente'
+                                WHEN 2 THEN 'Cancelada'
+                                ELSE 'Desconocido'
+                            END AS status
+                            FROM ventas v
+                            JOIN productos_venta pv ON v.idventa = pv.idventa
+                            JOIN productos p ON pv.idproducto = p.idproducto
+                            JOIN clientes c ON v.idcliente = c.idcliente
+                            GROUP BY v.idventa, v.fecha, c.nombre, c.apaterno, c.amaterno, v.tipo, v.status
+                            ORDER BY v.fecha DESC;
+
+                    `, 
+                );
+                
+                return ventas;
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener el historial ventas.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        }
     },
     Sale: {
         getProducts: async (parent) => {
@@ -210,7 +255,7 @@ const salesResolver = {
                     }
                 }
                 
-                return "Se insertó mi pa."
+                return "Venta realizada."
                 
             } catch (error) {
                 console.log(error);
