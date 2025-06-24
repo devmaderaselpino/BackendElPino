@@ -177,13 +177,13 @@ const salesResolver = {
                 
                 const [[pendiente]] = await connection.query(
                     `   
-                       SELECT SUM(cantidad) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0;
+                       SELECT SUM(cantidad - abono) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0;
                     `, [idVenta]
                 );
 
                 const [[abono]] = await connection.query(
                     `   
-                        SELECT IFNULL(SUM(cantidad),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
+                        SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
                             AND pagado = 0 AND (fecha_programada < NOW() || MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
                     `, [idVenta]
                 );

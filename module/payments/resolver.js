@@ -119,9 +119,12 @@ const paymentResolver = {
     Mutation : {
         insertPayment: async(_,{ abono, idVenta }, ctx) => {
 
-            console.log(abono, "  ", idVenta);
-
             try {
+
+                await connection.execute(
+                    `INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1`,
+                    [idVenta, abono, ctx.usuario.idUsuario]
+                )
 
                 const [pagos] = await connection.query(`
                     SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
@@ -129,8 +132,7 @@ const paymentResolver = {
                 );
 
                 let abonoRecibido = abono;
-                const resultado = [];
-
+                
                 for (const item of pagos) {
                     
                     const pendiente = parseFloat(item.cantidad - item.abono);
@@ -138,7 +140,7 @@ const paymentResolver = {
 
                     const abonoAportado = Math.min(abonoRecibido, pendiente);
 
-                    if(abonoAportado === item.cantidad){
+                    if((abonoAportado + item.abono) === item.cantidad){
                         await connection.execute(
                             `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
                             [abonoAportado, item.idAbonoProgramado]
@@ -153,17 +155,19 @@ const paymentResolver = {
                     abonoRecibido -= abonoAportado;
                 }
 
-                for ( const item of resultado ) {
-                    
+                const [abonos_programados] = await connection.query(`
+                    SELECT COUNT(*) AS total_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                if(abonos_programados[0].total_pendiente === 0){
                     await connection.execute(
-                        `UPDATE abonos_programados SET abono = ;`,
-                        [item.abonadoInteres, item.abonadoIVAInteres, idCredito, item.id]
+                        `UPDATE ventas SET status = 0 WHERE idVenta = ?;`,
+                        [idVenta]
                     )
-                    
                 }
 
-                
-                return "Venta realizada."
+                return "Abono realizado con éxito."
                 
             } catch (error) {
                 console.log(error);
