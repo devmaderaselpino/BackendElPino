@@ -29,7 +29,7 @@ async function startApolloServer() {
         expressMiddleware(server, {
             context: async({ req }) =>{
                 const token = req.headers.authorization || '';
-                if (token !== "null") {
+                if (token) {
                     try {
                         usuario = jsonwebtoken.verify(token, process.env.SECRETA);
                         return {

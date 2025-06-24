@@ -89,8 +89,96 @@ const paymentResolver = {
                 });
                 
             }
-        }
+        },
+        getPaymentsBySale: async (_,{ idVenta }) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                        SELECT idAbonoProgramado, num_pago, cantidad, abono, IFNULL(fecha_programada, "N/A") AS fecha_programada, IFNULL(fecha_liquido, "N/A") AS fecha_liquido, pagado FROM abonos_programados WHERE idVenta = ?
+                    `, [idVenta]
+                );
+
+               return payments;
+
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener pagos.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
+        
     },
+    Mutation : {
+        insertPayment: async(_,{ abono, idVenta }, ctx) => {
+
+            console.log(abono, "  ", idVenta);
+
+            try {
+
+                const [pagos] = await connection.query(`
+                    SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                let abonoRecibido = abono;
+                const resultado = [];
+
+                for (const item of pagos) {
+                    
+                    const pendiente = parseFloat(item.cantidad - item.abono);
+                    if (abonoRecibido <= 0) break;
+
+                    const abonoAportado = Math.min(abonoRecibido, pendiente);
+
+                    if(abonoAportado === item.cantidad){
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
+                            [abonoAportado, item.idAbonoProgramado]
+                        )
+                    }else{
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoAportado, item.idAbonoProgramado]
+                        )
+                    }
+
+                    abonoRecibido -= abonoAportado;
+                }
+
+                for ( const item of resultado ) {
+                    
+                    await connection.execute(
+                        `UPDATE abonos_programados SET abono = ;`,
+                        [item.abonadoInteres, item.abonadoIVAInteres, idCredito, item.id]
+                    )
+                    
+                }
+
+                
+                return "Venta realizada."
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando venta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+    }
     
 };
 

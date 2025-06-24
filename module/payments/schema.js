@@ -14,9 +14,24 @@ const paymentSchema = `#graphql
         cobrador: String!
     }
 
+    type TablaPago {
+        idAbonoProgramado:Int
+        num_pago: Int 
+        cantidad: Float
+        abono: Float
+        fecha_programada: String 
+        fecha_liquido: String
+        pagado: Int
+    }
+
     type Query {
         getPayments(tipo: Int): [TotalPayments]
         GetAbonos: [Abono]
+        getPaymentsBySale(idVenta: Int): [TablaPago]
+    }
+
+    type Mutation {
+        insertPayment(abono: Float, idVenta: Int): String
     }
     
     

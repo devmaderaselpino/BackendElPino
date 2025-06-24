@@ -1,5 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import { addDay, weekEnd, weekStart, format, addMonth } from "@formkit/tempo"
 
 const salesResolver = {
     Query : {
@@ -170,6 +171,48 @@ const salesResolver = {
                 });
                 
             }
+        },
+        getTotalsBySale: async (_, {idVenta}) => {
+            try {
+                
+                const [[pendiente]] = await connection.query(
+                    `   
+                       SELECT SUM(cantidad) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0;
+                    `, [idVenta]
+                );
+
+                const [[abono]] = await connection.query(
+                    `   
+                        SELECT IFNULL(SUM(cantidad),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
+                            AND pagado = 0 AND (fecha_programada < NOW() || MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
+                    `, [idVenta]
+                );
+
+                const [[nombre_cliente]] = await connection.query(
+                    `   
+                        SELECT CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente FROM ventas 
+                            INNER JOIN clientes c ON ventas.idCliente = c.idCliente
+                            WHERE idVenta = ?;
+                    `, [idVenta]
+                );
+
+                return {
+                    pendiente: pendiente.cantidad_pendiente,
+                    abono: abono.cantidad_abono,
+                    nombre: nombre_cliente.nombre_cliente
+                };
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener totales.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
         }
     },
     Sale: {
@@ -192,11 +235,21 @@ const salesResolver = {
 
             try {
                 let status = 1;
-
+                
                 const { total, idCliente, fecha, tipo, productos, abono, municipio} = input;
-
+                
+                let plazo = tipo;
+                
                 if(tipo === 1){
                     status = 0;
+                }
+
+                if(tipo === 2){
+                    plazo = 6;
+                }
+
+                if(tipo === 3){
+                    plazo = 12;
                 }
 
                 const venta = await connection.execute(
@@ -254,7 +307,23 @@ const salesResolver = {
                         );
                     }
                 }
-                
+
+                let fecha_programada = format(weekEnd(new Date()), "YYYY-MM-DD", "en");
+
+                if(tipo !== 1){
+                    for( let index = 0; index < plazo; index++ ){
+                        fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
+    
+                        const abonoProgramados = await connection.execute(
+                            `
+                                INSERT INTO abonos_programados SET idVenta = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                            `,[venta[0].insertId, index + 1, (total - abono) / plazo, fecha_programada]
+                            
+                        );
+                        
+                    }
+                }
+
                 return "Venta realizada."
                 
             } catch (error) {
