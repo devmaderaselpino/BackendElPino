@@ -33,6 +33,7 @@ const inventorySchema = `#graphql
     type Query {
         getPendingInventory(tipo: Int): [InventarioPendiente]
         getCategories: [Categoria]
+        getCategorias: [Categoria]
         getProducts(categoria: Int, municipio: Int): [Producto]
         GetProductosInventarios: [ProductoInventario]
     }

@@ -147,7 +147,16 @@ const inventoryResolver = {
                 
             }
         },
-        
+
+         getCategorias: async (_, __, { }) => {
+            try {
+                const [categorias] = await connection.query('SELECT * FROM categorias');
+                return categorias;
+            } catch (error) {
+                console.error("Error al obtener categorías:", error);
+                throw new Error("No se pudieron obtener las categorías");
+            }
+        },
         GetProductosInventarios: async (_, {}) => {
             try {
                 const [productosInv] = await connection.query(
