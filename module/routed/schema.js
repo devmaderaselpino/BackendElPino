@@ -10,6 +10,7 @@ const routedSchema = `#graphql
         nombreCliente: String!
         direccion: String!
         municipio: String!
+        distinguido: Int
     }
 
     type Ruta {
@@ -33,6 +34,7 @@ const routedSchema = `#graphql
         getCobradores: [Cobrador]
         getClientesSinAsignar: [Cliente!]!
         getRutas(idCobrador: Int!): [Ruta]
+        getClientesByCobrador: [Cliente]
     }
 
     type Mutation {

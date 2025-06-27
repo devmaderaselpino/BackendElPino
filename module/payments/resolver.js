@@ -114,7 +114,37 @@ const paymentResolver = {
                 
             }
         },
-        
+        getPaymentsByCobrador: async (_,{}, ctx) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                       	
+                    SELECT a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d") as fecha_reg, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente
+                        FROM abonos a
+                        INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.status = 1
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE a.usuario_reg = ? AND a.tipo = 1 AND a.status = 1
+
+
+                    `, [ctx.usuario.idUsuario]
+                );
+
+               return payments;
+
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener pagos.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        }
     },
     Mutation : {
         insertPayment: async(_,{ abono, idVenta }, ctx) => {

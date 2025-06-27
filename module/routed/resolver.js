@@ -85,6 +85,27 @@ const routedResolver = {
                     extensions: { code: "BAD_REQUEST", http: { status: 400 } },
                 });
             }
+        },
+        getClientesByCobrador: async (_, {}, ctx) => {
+            try {
+                const [clientes] = await connection.query(`
+                    SELECT 
+                        c.idCliente, c.distinguido,
+                        CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombreCliente, 
+                        CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion
+                        FROM asignacion_rutas ar
+                        INNER JOIN ventas v ON  ar.idCliente = v.idCliente AND v.status = 1
+                        INNER JOIN clientes c ON ar.idCliente = c.idCliente
+                        INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                        INNER JOIN colonias col ON c.colonia = col.idColonia
+                        WHERE ar.idCobrador = ? GROUP BY ar.idCobrador
+                `, [ctx.usuario.idUsuario]
+                );
+
+                return clientes;
+            } catch (error) {   
+                console.log(error);
+            }
         }
     },
 

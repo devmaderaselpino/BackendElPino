@@ -17,6 +17,7 @@ const salesSchema = `#graphql
         usuario_reg: Int
         idCliente: Int
         status: Int
+        tipo: Int
         getProducts: [SaleDetail]
     }
 
