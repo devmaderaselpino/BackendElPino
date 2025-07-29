@@ -50,6 +50,7 @@ const salesSchema = `#graphql
         nombre: String
         abono: Float
         pendiente: Float
+        atrasado: Float
     }
 
     input ProductSale {
@@ -60,19 +61,25 @@ const salesSchema = `#graphql
 
     input NewSale {
         total: Float
-        usuario_reg: Int
         idCliente: Int
-        fecha: String
         tipo: Int
         productos: [ProductSale]
         abono: Float
         municipio: Int
     }
 
+    input EditSale {
+        precio: Float
+        cantidad: Int
+        idVenta: Int
+        idProducto: Int
+    }
+
     type Query {
         getSalesAmount(tipo: Int): [TotalSales]
         getLastSaleByClient(idCliente: Int) : String
         getSalesByClient(input: SalesInput): [Sale]
+        getSaleByClient(idVenta: Int): Sale
         getClientStats(idCliente: Int): ClientStats
         GetVentas: [Venta]
         getTotalsBySale(idVenta: Int): SaleTotals
@@ -80,6 +87,7 @@ const salesSchema = `#graphql
     
     type Mutation {
         insertSale(input: NewSale) : String
+        editSale(input: EditSale) : String
     }
     
 `

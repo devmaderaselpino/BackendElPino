@@ -14,6 +14,7 @@ const authenticationSchema = `#graphql
     }
     type Mutation {
         loginUser(input: userLoginInput) : token
+        loginCobrador(input: userLoginInput) : token
     }
 `
 export default authenticationSchema

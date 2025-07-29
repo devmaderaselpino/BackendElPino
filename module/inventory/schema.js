@@ -5,6 +5,7 @@ const inventorySchema = `#graphql
         value: Int,
         color: String,
         description: String
+        productos: Int
     }
 
     type Categoria {

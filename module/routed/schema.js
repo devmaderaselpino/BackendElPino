@@ -34,7 +34,7 @@ const routedSchema = `#graphql
         getCobradores: [Cobrador]
         getClientesSinAsignar: [Cliente!]!
         getRutas(idCobrador: Int!): [Ruta]
-        getClientesByCobrador: [Cliente]
+        getClientesByCobrador(nombre: String, tipo: Int): [Cliente]
     }
 
     type Mutation {

@@ -1,6 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
-import { addDay, weekEnd, weekStart, format, addMonth } from "@formkit/tempo"
+import { addDay, weekEnd, weekStart, format, addMonth, diffMonths } from "@formkit/tempo"
 
 const salesResolver = {
     Query : {
@@ -76,6 +76,16 @@ const salesResolver = {
                 [idCliente]
             );
             return ventas;
+        },
+        getSaleByClient: async (_, { idVenta }) => {
+
+            const [ventas] = await connection.query(
+                `SELECT * FROM ventas WHERE idVenta = ?`,
+                [idVenta]
+            );
+
+            
+            return ventas[0];
         },
         getLastSaleByClient: async (_,{idCliente}) => {
             try {
@@ -175,16 +185,117 @@ const salesResolver = {
         getTotalsBySale: async (_, {idVenta}) => {
             try {
                 
+                const [infoVenta]  = await connection.query(
+                    `   
+                       SELECT tipo, fecha, total FROM ventas WHERE idVenta = ?;
+                    `, [idVenta]
+                );
+
+                let diferencia = diffMonths(new Date(), infoVenta[0].fecha);
+
+                if(diferencia < 0) {
+                    diferencia = diferencia * -1;
+                }
+
+                diferencia = diferencia + 1;
+     
                 const [[pendiente]] = await connection.query(
                     `   
                        SELECT SUM(cantidad - abono) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0;
                     `, [idVenta]
                 );
+                
+                let descuento = 0;
+                
+                let totalPendiente = pendiente.cantidad_pendiente;
+
+                if(infoVenta[0].tipo === 2){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.15;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 5: 
+                            descuento = infoVenta[0].total * 0.05;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                } else if(infoVenta[0].tipo === 3){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.18;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.16;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 5:
+                            descuento = infoVenta[0].total * 0.14;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 6:
+                            descuento = infoVenta[0].total * 0.12;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 7:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 8:
+                            descuento = infoVenta[0].total * 0.08;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 9:
+                            descuento = infoVenta[0].total * 0.06;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 10:
+                            descuento = infoVenta[0].total * 0.04;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 11:
+                            descuento = infoVenta[0].total * 0.02;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                }
 
                 const [[abono]] = await connection.query(
                     `   
                         SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
-                            AND pagado = 0 AND (fecha_programada < NOW() || MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
+	                        AND pagado = 0 AND (MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
+                    `, [idVenta]
+                );
+
+                const [[abonoaAtrasado]] = await connection.query(
+                    `   
+                        SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
+	                        AND pagado = 0 AND (fecha_programada < NOW());
                     `, [idVenta]
                 );
 
@@ -197,8 +308,9 @@ const salesResolver = {
                 );
 
                 return {
-                    pendiente: pendiente.cantidad_pendiente,
+                    pendiente: totalPendiente,
                     abono: abono.cantidad_abono,
+                    atrasado: abonoaAtrasado.cantidad_abono,
                     nombre: nombre_cliente.nombre_cliente
                 };
             } catch (error) {
@@ -221,7 +333,7 @@ const salesResolver = {
                 `SELECT 
                     p.descripcion, pv.id,
                     pv.cantidad,
-                    p.precio, p.img_producto 
+                    pv.precio, p.img_producto 
                     FROM productos_venta pv
                     INNER JOIN productos p ON pv.idProducto = p.idProducto
                     WHERE pv.idVenta = ?`,
@@ -236,7 +348,7 @@ const salesResolver = {
             try {
                 let status = 1;
                 
-                const { total, idCliente, fecha, tipo, productos, abono, municipio} = input;
+                const { total, idCliente, tipo, productos, abono, municipio} = input;
                 
                 let plazo = tipo;
                 
@@ -271,8 +383,8 @@ const salesResolver = {
                 if(abono > 0 && tipo !== 1){
                     const abonoI = await connection.execute(
                         `
-                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 2; 
-                        `,[venta[0].insertId, abono, ctx.usuario.idUsuario]
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = ?, usuario_reg = ?, tipo = 2; 
+                        `,[venta[0].insertId, abono, total, total - abono, ctx.usuario.idUsuario]
                         
                     );
                 }
@@ -280,8 +392,8 @@ const salesResolver = {
                 if(tipo === 1){
                     const abonoI = await connection.execute(
                         `
-                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 4; 
-                        `,[venta[0].insertId, total, ctx.usuario.idUsuario]
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = ?, usuario_reg = ?, tipo = 4; 
+                        `,[venta[0].insertId, total, total, total - abono, ctx.usuario.idUsuario]
                         
                     );
                 }
@@ -308,16 +420,16 @@ const salesResolver = {
                     }
                 }
 
-                let fecha_programada = format(weekEnd(new Date()), "YYYY-MM-DD", "en");
-
+                let fecha_programada = format(weekStart(addDay(new Date(), 7)), "YYYY-MM-DD", "en");
+            
                 if(tipo !== 1){
                     for( let index = 0; index < plazo; index++ ){
                         fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
     
                         const abonoProgramados = await connection.execute(
                             `
-                                INSERT INTO abonos_programados SET idVenta = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                            `,[venta[0].insertId, index + 1, (total - abono) / plazo, fecha_programada]
+                                INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                            `,[venta[0].insertId, idCliente, index + 1, Math.ceil((total - abono) / plazo), fecha_programada]
                             
                         );
                         
@@ -330,6 +442,80 @@ const salesResolver = {
                 console.log(error);
                 
                 throw new GraphQLError("Error insertando venta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+        editSale: async(_,{ input }, ctx) => {
+
+            try {
+                
+                const { idVenta, idProducto, cantidad, precio } = input;
+
+                const [[infoInicial]] = await connection.query(
+                    `SELECT
+                        total - ? AS restante, tipo, fecha
+                        FROM ventas WHERE idVenta = ?`,
+                    [precio * cantidad, idVenta]
+                );
+
+                const [[abonos]] = await connection.query(
+                    `SELECT IFNULL(SUM(abono),0) AS total_abonado FROM abonos WHERE idVenta = ? AND status = 1`,
+                    [idVenta]
+                );
+
+                const productoVenta = await connection.execute(
+                    `
+                       UPDATE productos_venta SET cantidad = cantidad - ? WHERE idVenta = ? AND idProducto = ?; 
+                    `,[cantidad, idVenta, idProducto]
+                );
+
+                const tipo = infoInicial.tipo = 3 && infoInicial.restante < 3500 ? 2 : infoInicial.tipo;
+                
+                const venta = await connection.execute(
+                    `
+                       UPDATE ventas SET total = total - ?, tipo = ? WHERE idVenta = ?; 
+                    `,[precio * cantidad, tipo, idVenta]
+                );
+
+                await connection.execute(
+                    `
+                       UPDATE abonos_programados SET status = 0 WHERE idVenta = ?; 
+                    `,[idVenta]
+                );
+
+                let fecha_programada = format((weekStart(addDay(infoInicial.fecha, 7))),  "YYYY-MM-DD", "en")
+
+                let plazo = 6;
+
+                if(infoInicial.tipo === 3){
+                    plazo = 12;
+                }
+
+                for( let index = 0; index < plazo; index++ ){
+                    fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
+
+                    const abonoProgramados = await connection.execute(
+                        `
+                            INSERT INTO abonos_programados SET idVenta = ?, idCliente = 1, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                        `,[idVenta, index + 1, Math.ceil((infoInicial.restante - abonos.total_abonado) / plazo), fecha_programada]
+                        
+                    );
+                    
+                }
+                
+
+                return "Modificación realizada."
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error editando venta.",{
                     extensions:{
                         code: "BAD_REQUEST",
                         http: {

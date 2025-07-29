@@ -25,8 +25,11 @@ import employeeSchema from "./employees/schema.js";
 import routedResolver from "./routed/resolver.js";
 import routedSchema from "./routed/schema.js";
 
-const typeDefs = mergeTypeDefs([authenticationSchema, clientsSchema, inventorySchema, paymentSchema, salesSchema, locationSchema, employeeSchema, routedSchema]);
-const resolvers = mergeResolvers([authenticationResolver, clientResolver, inventoryResolver, paymentResolver, salesResolver, locationResolver, employeesResolver, routedResolver]);
+import cobradorResolver from "./cobrador/schema.js";
+import cobradorSchema from "./cobrador/resolver.js";
+
+const typeDefs = mergeTypeDefs([authenticationSchema, clientsSchema, inventorySchema, paymentSchema, salesSchema, locationSchema, employeeSchema, routedSchema,cobradorSchema]);
+const resolvers = mergeResolvers([authenticationResolver, clientResolver, inventoryResolver, paymentResolver, salesResolver, locationResolver, employeesResolver, routedResolver, cobradorResolver]);
 
 const schema = makeExecutableSchema({
     typeDefs,

@@ -86,27 +86,49 @@ const routedResolver = {
                 });
             }
         },
-        getClientesByCobrador: async (_, {}, ctx) => {
+        getClientesByCobrador: async (_, { nombre, tipo }, ctx) => {
             try {
-                const [clientes] = await connection.query(`
+                const condicionNombre = nombre
+                ? `AND CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) LIKE ?`
+                : "";
+
+                const condicionPendientes = tipo === 2
+                ? `AND (
+                    SELECT COUNT(*) FROM abonos_programados ap
+                    WHERE ap.idCliente = ar.idCliente
+                    AND ap.pagado = 0
+                    AND ap.fecha_programada <= LAST_DAY(CURDATE())
+                ) > 0`
+                : "";
+
+                const query = `
                     SELECT 
                         c.idCliente, c.distinguido,
                         CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombreCliente, 
                         CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion
                         FROM asignacion_rutas ar
-                        INNER JOIN ventas v ON  ar.idCliente = v.idCliente AND v.status = 1
+                        INNER JOIN ventas v ON ar.idCliente = v.idCliente AND v.status = 1
                         INNER JOIN clientes c ON ar.idCliente = c.idCliente
                         INNER JOIN municipios m ON c.municipio = m.idMunicipio
                         INNER JOIN colonias col ON c.colonia = col.idColonia
-                        WHERE ar.idCobrador = ? GROUP BY ar.idCobrador
-                `, [ctx.usuario.idUsuario]
-                );
+                        WHERE ar.idCobrador = ?
+                        ${condicionNombre}
+                        ${condicionPendientes}
+                        GROUP BY ar.idCliente
+                `;
+
+                const parametros = [ctx.usuario.idUsuario];
+                if (nombre) parametros.push(`%${nombre}%`);
+
+                const [clientes] = await connection.query(query, parametros);
 
                 return clientes;
-            } catch (error) {   
+            } catch (error) {
                 console.log(error);
+                return [];
             }
         }
+
     },
 
     Mutation: {

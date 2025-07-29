@@ -12,7 +12,8 @@ const inventoryResolver = {
                             SELECT SUM(stock) AS stock, 
                                 (SELECT SUM(min_stock - stock)
                                 FROM inventario_rosario
-                                WHERE stock < min_stock) AS productos_pendientes
+                                WHERE stock < min_stock) AS productos_pendientes,
+                                (SELECT COUNT(*) FROM inventario_rosario WHERE stock < min_stock) AS productos
                                 FROM inventario_rosario;
                         `, []
                     );
@@ -23,12 +24,14 @@ const inventoryResolver = {
                             value: pendingInventory[0].stock,
                             color: "#10b981",
                             description: "Productos en stock",
+                            productos: pendingInventory[0].stock
                         },
                         {
                             name: "Faltante",
                             value: pendingInventory[0].productos_pendientes,
                             color: "#ef4444",
                             description: "Productos agotados",
+                            productos: pendingInventory[0].productos
                         },
                     ]
                 } else{
@@ -37,7 +40,8 @@ const inventoryResolver = {
                             SELECT SUM(stock) AS stock, 
                                 (SELECT SUM(min_stock - stock)
                                 FROM inventario_escuinapa
-                                WHERE stock < min_stock) AS productos_pendientes
+                                WHERE stock < min_stock) AS productos_pendientes,
+                                (SELECT COUNT(*) FROM inventario_escuinapa WHERE stock < min_stock) AS productos
                                 FROM inventario_escuinapa;
                         `, []
                     );
@@ -48,12 +52,14 @@ const inventoryResolver = {
                             value: pendingInventory[0].stock,
                             color: "#10b981",
                             description: "Productos en stock",
+                            productos: pendingInventory[0].stock
                         },
                         {
                             name: "Faltante",
                             value: pendingInventory[0].productos_pendientes,
                             color: "#ef4444",
                             description: "Productos agotados",
+                            productos: pendingInventory[0].productos
                         },
                     ]
                 }

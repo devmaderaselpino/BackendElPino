@@ -1,5 +1,7 @@
+import { format } from "@formkit/tempo";
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import formatPrice from "../../functions/FormatPrice.js";
 
 const paymentResolver = {
     Query : {
@@ -95,7 +97,7 @@ const paymentResolver = {
                 
                 const [payments] = await connection.query(
                     `   
-                        SELECT idAbonoProgramado, num_pago, cantidad, abono, IFNULL(fecha_programada, "N/A") AS fecha_programada, IFNULL(fecha_liquido, "N/A") AS fecha_liquido, pagado FROM abonos_programados WHERE idVenta = ?
+                        SELECT idAbonoProgramado, num_pago, cantidad, abono, IFNULL(fecha_programada, "N/A") AS fecha_programada, IFNULL(fecha_liquido, "N/A") AS fecha_liquido, pagado FROM abonos_programados WHERE idVenta = ? AND status = 1
                     `, [idVenta]
                 );
 
@@ -120,14 +122,14 @@ const paymentResolver = {
                 const [payments] = await connection.query(
                     `   
                        	
-                    SELECT a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d") as fecha_reg, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente
+                    SELECT a.idVenta, a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d %H:%i:%s") as fecha_reg, a.saldo_anterior, a.saldo_nuevo, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente, ? AS cobrador
                         FROM abonos a
-                        INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.status = 1
+                        INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.tipo <> 1
                         INNER JOIN clientes c ON v.idCliente = c.idCliente
-                        WHERE a.usuario_reg = ? AND a.tipo = 1 AND a.status = 1
+                        WHERE a.usuario_reg = ? AND a.tipo = 1 AND a.status = 1 ORDER BY a.id DESC
 
 
-                    `, [ctx.usuario.idUsuario]
+                    `, [ctx.usuario.nombre, ctx.usuario.idUsuario]
                 );
 
                return payments;
@@ -147,13 +149,17 @@ const paymentResolver = {
         }
     },
     Mutation : {
-        insertPayment: async(_,{ abono, idVenta }, ctx) => {
+        insertPayment: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
+
+            console.log(saldo_anterior);
+            console.log(saldo_nuevo);
+            
 
             try {
 
-                await connection.execute(
-                    `INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1`,
-                    [idVenta, abono, ctx.usuario.idUsuario]
+                const abonoInsert = await connection.execute(
+                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1`,
+                    [idVenta, abono, saldo_anterior, saldo_nuevo, ctx.usuario.idUsuario]
                 )
 
                 const [pagos] = await connection.query(`
@@ -185,6 +191,13 @@ const paymentResolver = {
                     abonoRecibido -= abonoAportado;
                 }
 
+                if(liquidado === 1){
+                    const [abonos_programados] = await connection.query( 
+                        `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idVenta = ?;`,
+                        [idVenta]
+                    );
+                }
+
                 const [abonos_programados] = await connection.query(`
                     SELECT COUNT(*) AS total_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
                     [idVenta]
@@ -197,7 +210,7 @@ const paymentResolver = {
                     )
                 }
 
-                return "Abono realizado con éxito."
+                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6941166060\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: $0.00\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: $0.00\n\n      GRACIAS POR SU PAGO!`
                 
             } catch (error) {
                 console.log(error);
