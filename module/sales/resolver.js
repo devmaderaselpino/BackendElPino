@@ -336,7 +336,7 @@ const salesResolver = {
                     pv.precio, p.img_producto 
                     FROM productos_venta pv
                     INNER JOIN productos p ON pv.idProducto = p.idProducto
-                    WHERE pv.idVenta = ?`,
+                    WHERE pv.idVenta = ? AND pv.cantidad > 0`,
                 [parent.idVenta]
             );
             return products;
@@ -455,33 +455,7 @@ const salesResolver = {
 
             try {
                 
-                const { idVenta, idProducto, cantidad, precio } = input;
-
-                const [[infoInicial]] = await connection.query(
-                    `SELECT
-                        total - ? AS restante, tipo, fecha
-                        FROM ventas WHERE idVenta = ?`,
-                    [precio * cantidad, idVenta]
-                );
-
-                const [[abonos]] = await connection.query(
-                    `SELECT IFNULL(SUM(abono),0) AS total_abonado FROM abonos WHERE idVenta = ? AND status = 1`,
-                    [idVenta]
-                );
-
-                const productoVenta = await connection.execute(
-                    `
-                       UPDATE productos_venta SET cantidad = cantidad - ? WHERE idVenta = ? AND idProducto = ?; 
-                    `,[cantidad, idVenta, idProducto]
-                );
-
-                const tipo = infoInicial.tipo = 3 && infoInicial.restante < 3500 ? 2 : infoInicial.tipo;
-                
-                const venta = await connection.execute(
-                    `
-                       UPDATE ventas SET total = total - ?, tipo = ? WHERE idVenta = ?; 
-                    `,[precio * cantidad, tipo, idVenta]
-                );
+                const { idVenta, productos, totalCancelado } = input;
 
                 await connection.execute(
                     `
@@ -489,6 +463,42 @@ const salesResolver = {
                     `,[idVenta]
                 );
 
+                const [[abonos]] = await connection.query(
+                    `SELECT IFNULL(SUM(abono),0) AS total_enganche FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 2`,
+                    [idVenta]
+                );
+
+                const [[abonosA]] = await connection.query(
+                    `SELECT IFNULL(SUM(abono),0) AS total_abonado FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 1`,
+                    [idVenta]
+                );
+
+                const [[infoInicial]] = await connection.query(
+                    `SELECT
+                        total - ? AS restante, tipo, fecha
+                        FROM ventas WHERE idVenta = ?`,
+                    [totalCancelado, idVenta]
+                );
+
+                const tipo = infoInicial.tipo = 3 && infoInicial.restante < 3500 ? 2 : infoInicial.tipo;
+
+                const estatus = infoInicial.restante > 0 ? 1 : 2;
+
+                await connection.execute(
+                    `
+                        UPDATE ventas SET total = total - ?, tipo = ?, status = ? WHERE idVenta = ?; 
+                    `,[totalCancelado, tipo, estatus, idVenta]
+                );
+
+                for(const producto of productos){
+                    
+                    const productoVenta = await connection.execute(
+                        `
+                        UPDATE productos_venta SET cantidad = cantidad - ? WHERE idVenta = ? AND id = ?; 
+                        `,[producto.cantidad, idVenta, producto.idProducto]
+                    );
+                }
+                
                 let fecha_programada = format((weekStart(addDay(infoInicial.fecha, 7))),  "YYYY-MM-DD", "en")
 
                 let plazo = 6;
@@ -497,18 +507,48 @@ const salesResolver = {
                     plazo = 12;
                 }
 
-                for( let index = 0; index < plazo; index++ ){
-                    fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
-
-                    const abonoProgramados = await connection.execute(
-                        `
-                            INSERT INTO abonos_programados SET idVenta = ?, idCliente = 1, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                        `,[idVenta, index + 1, Math.ceil((infoInicial.restante - abonos.total_abonado) / plazo), fecha_programada]
+                if(infoInicial.restante > 0){
+                    for( let index = 0; index < plazo; index++ ){
+                        fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
+    
+                        const abonoProgramados = await connection.execute(
+                            `
+                                INSERT INTO abonos_programados SET idVenta = ?, idCliente = 1, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                            `,[idVenta, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
+                            
+                        );
                         
+                    }
+
+                    const [pagos] = await connection.query(`
+                        SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                        [idVenta]
                     );
+
+                    let abonoRecibido = abonosA.total_abonado;
                     
+                    for (const item of pagos) {
+                        
+                        const pendiente = parseFloat(item.cantidad - item.abono);
+                        if (abonoRecibido <= 0) break;
+
+                        const abonoAportado = Math.min(abonoRecibido, pendiente);
+
+                        if((abonoAportado + item.abono) === item.cantidad){
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
+                                [abonoAportado, item.idAbonoProgramado]
+                            )
+                        }else{
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                                [abonoAportado, item.idAbonoProgramado]
+                            )
+                        }
+
+                        abonoRecibido -= abonoAportado;
+                    }
                 }
-                
 
                 return "Modificación realizada."
                 

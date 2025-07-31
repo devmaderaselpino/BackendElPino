@@ -68,11 +68,17 @@ const salesSchema = `#graphql
         municipio: Int
     }
 
-    input EditSale {
+    input Editar {
         precio: Float
         cantidad: Int
         idVenta: Int
         idProducto: Int
+    }
+
+    input EditSale {
+        idVenta: Int
+        productos: [Editar]
+        totalCancelado: Float
     }
 
     type Query {
