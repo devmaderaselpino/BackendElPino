@@ -97,6 +97,7 @@ const routedResolver = {
                     SELECT COUNT(*) FROM abonos_programados ap
                     WHERE ap.idCliente = ar.idCliente
                     AND ap.pagado = 0
+                    AND ap.status = 1
                     AND ap.fecha_programada <= LAST_DAY(CURDATE())
                 ) > 0`
                 : "";

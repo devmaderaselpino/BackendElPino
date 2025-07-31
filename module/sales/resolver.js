@@ -201,7 +201,7 @@ const salesResolver = {
      
                 const [[pendiente]] = await connection.query(
                     `   
-                       SELECT SUM(cantidad - abono) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0;
+                       SELECT SUM(cantidad - abono) AS cantidad_pendiente, SUM(interes-abono_interes) AS interes_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1;
                     `, [idVenta]
                 );
                 
@@ -288,14 +288,14 @@ const salesResolver = {
                 const [[abono]] = await connection.query(
                     `   
                         SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
-	                        AND pagado = 0 AND (MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
+	                        AND pagado = 0 AND status = 1 AND (MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
                     `, [idVenta]
                 );
 
                 const [[abonoaAtrasado]] = await connection.query(
                     `   
                         SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
-	                        AND pagado = 0 AND (fecha_programada < NOW());
+	                        AND pagado = 0 AND status = 1 AND (fecha_programada < NOW());
                     `, [idVenta]
                 );
 
@@ -309,6 +309,7 @@ const salesResolver = {
 
                 return {
                     pendiente: totalPendiente,
+                    interes: pendiente.interes_pendiente,
                     abono: abono.cantidad_abono,
                     atrasado: abonoaAtrasado.cantidad_abono,
                     nombre: nombre_cliente.nombre_cliente

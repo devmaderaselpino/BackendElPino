@@ -159,7 +159,7 @@ const paymentResolver = {
                 )
 
                 const [pagos] = await connection.query(`
-                    SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
+                    SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
                     [idVenta]
                 );
 
