@@ -19,6 +19,8 @@ const paymentSchema = `#graphql
         num_pago: Int 
         cantidad: Float
         abono: Float
+        interes: Float
+        abono_interes: Float
         fecha_programada: String 
         fecha_liquido: String
         pagado: Int

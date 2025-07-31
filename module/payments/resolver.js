@@ -97,7 +97,7 @@ const paymentResolver = {
                 
                 const [payments] = await connection.query(
                     `   
-                        SELECT idAbonoProgramado, num_pago, cantidad, abono, IFNULL(fecha_programada, "N/A") AS fecha_programada, IFNULL(fecha_liquido, "N/A") AS fecha_liquido, pagado FROM abonos_programados WHERE idVenta = ? AND status = 1
+                        SELECT idAbonoProgramado, num_pago, cantidad, abono, interes, abono_interes, IFNULL(fecha_programada, "N/A") AS fecha_programada, IFNULL(fecha_liquido, "N/A") AS fecha_liquido, pagado FROM abonos_programados WHERE idVenta = ? AND status = 1
                     `, [idVenta]
                 );
 
@@ -151,10 +151,6 @@ const paymentResolver = {
     Mutation : {
         insertPayment: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
 
-            console.log(saldo_anterior);
-            console.log(saldo_nuevo);
-            
-
             try {
 
                 const abonoInsert = await connection.execute(
@@ -170,25 +166,47 @@ const paymentResolver = {
                 let abonoRecibido = abono;
                 
                 for (const item of pagos) {
-                    
-                    const pendiente = parseFloat(item.cantidad - item.abono);
                     if (abonoRecibido <= 0) break;
 
-                    const abonoAportado = Math.min(abonoRecibido, pendiente);
+                    const interesPendiente = parseFloat(item.interes - item.abono_interes); 
+                    const capitalPendiente = parseFloat(item.cantidad - item.abono); 
 
-                    if((abonoAportado + item.abono) === item.cantidad){
+                    if (interesPendiente > 0) {
+                        const abonoParaInteres = Math.min(abonoRecibido, interesPendiente);
+
                         await connection.execute(
-                            `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
-                            [abonoAportado, item.idAbonoProgramado]
-                        )
-                    }else{
-                        await connection.execute(
-                            `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
-                            [abonoAportado, item.idAbonoProgramado]
-                        )
+                            `UPDATE abonos_programados SET abono_interes = (abono_interes + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaInteres, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaInteres;
+                        item.abono_interes += abonoParaInteres;
                     }
 
-                    abonoRecibido -= abonoAportado;
+                    if (abonoRecibido <= 0) {
+                    
+                        continue;
+                    }
+
+                    if (capitalPendiente > 0) {
+                        const abonoParaCapital = Math.min(abonoRecibido, capitalPendiente);
+
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaCapital, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaCapital;
+                        item.abono += abonoParaCapital; 
+                    }
+
+                    const totalAbonadoInteres = parseFloat(item.abono_interes);
+                    const totalAbonadoCapital = parseFloat(item.abono);
+
+                    if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
+                        await connection.execute(
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
+                            [item.idAbonoProgramado]
+                        );
+                    }
                 }
 
                 if(liquidado === 1){
