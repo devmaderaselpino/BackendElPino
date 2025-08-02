@@ -95,6 +95,7 @@ const salesSchema = `#graphql
     type Mutation {
         insertSale(input: NewSale) : String
         editSale(input: EditSale) : String
+        cancelSale(idVenta: Int) : String
     }
     
 `

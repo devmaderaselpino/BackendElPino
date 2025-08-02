@@ -376,7 +376,7 @@ const salesResolver = {
                     const productosVenta = await connection.execute(
                         `
                            INSERT INTO productos_venta SET idVenta = ?, idProducto = ?, cantidad = ?, precio = ?; 
-                        `,[venta[0].insertId, producto.idProducto, producto.cantidad, producto.precio]
+                        `,[venta[0].insertId, producto.idProducto, producto.cantidad, Math.ceil(producto.precio)]
                     
                     );
                 }
@@ -393,8 +393,8 @@ const salesResolver = {
                 if(tipo === 1){
                     const abonoI = await connection.execute(
                         `
-                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = ?, usuario_reg = ?, tipo = 4; 
-                        `,[venta[0].insertId, total, total, total - abono, ctx.usuario.idUsuario]
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = 0, usuario_reg = ?, tipo = 4; 
+                        `,[venta[0].insertId, total, total, ctx.usuario.idUsuario]
                         
                     );
                 }
@@ -566,6 +566,35 @@ const salesResolver = {
                 });
             }
         },
+        cancelSale: async(_,{idVenta}, ctx) => {
+            try {
+                await connection.execute(
+                    `
+                        UPDATE ventas SET status = 2 WHERE idVenta = ?; 
+                    `,[idVenta]
+                );
+
+                await connection.execute(
+                    `
+                       UPDATE abonos SET status = 0 WHERE idVenta = ?; 
+                    `,[idVenta]
+                );
+
+                return "Venta cancelada.";
+
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error cancelando venta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        }
     }
     
 };
