@@ -308,7 +308,8 @@ const salesResolver = {
                 );
 
                 return {
-                    pendiente: totalPendiente,
+                    pendiente: Math.ceil(totalPendiente + pendiente.interes_pendiente),
+                    total: pendiente.cantidad_pendiente + pendiente.interes_pendiente,
                     interes: pendiente.interes_pendiente,
                     abono: abono.cantidad_abono,
                     atrasado: abonoaAtrasado.cantidad_abono,

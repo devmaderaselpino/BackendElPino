@@ -62,7 +62,7 @@ const paymentResolver = {
                     SELECT 
                         DATE_FORMAT(a.fecha_reg, '%Y-%m-%d') AS fecha,
                         CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
-                        a.abono AS abono,
+                        a.abono AS abono, a.id,
                         CASE a.tipo
                         WHEN 1 THEN 'Abono'
                         WHEN 2 THEN 'Enganche'
@@ -73,7 +73,7 @@ const paymentResolver = {
                         JOIN usuarios u ON a.usuario_reg = u.idUsuario
                         JOIN ventas v ON a.idVenta = v.idVenta
                         JOIN clientes c ON v.idCliente = c.idCliente
-                        WHERE a.tipo IN (1, 2, 3)
+                        WHERE a.tipo IN (1, 2, 3) AND a.status = 1
                         ORDER BY a.fecha_reg DESC;
                     `, 
                 );
@@ -243,6 +243,93 @@ const paymentResolver = {
                 });
             }
         },
+        cancelPayment: async(_, {idAbono}, ctx) => {
+            try {
+
+                const [[datos]] = await connection.query(
+                    `   
+                       	
+                        SELECT abono, idVenta FROM abonos WHERE id = ?
+
+
+                    `, [idAbono]
+                );
+
+                await connection.execute(
+                    `
+                       UPDATE abonos SET status = 0 WHERE id = ?; 
+                    `,[idAbono]
+                );
+
+                const [abonos] = await connection.query(
+                    `
+                        SELECT idAbonoProgramado, cantidad, abono, interes, abono_interes FROM abonos_programados WHERE idVenta = ? AND (abono > 0 || abono_interes > 0) AND status = 1 ORDER BY idAbonoProgramado DESC;
+                    `, [datos.idVenta]
+                )
+
+                console.log(abonos);
+
+                let saldoAbono = datos.abono;
+                let pagosActualizados = [...abonos];
+
+                for (let i = 0; i < pagosActualizados.length; i++) {
+                    let pago = pagosActualizados[i];
+
+                    if (saldoAbono > 0 && pago.abono_interes > 0) {
+                        const cantidadARestar = Math.min(saldoAbono, pago.abono_interes);
+                        pago.abono_interes -= cantidadARestar;
+                        saldoAbono -= cantidadARestar;
+                    }
+
+                    
+                    if (saldoAbono > 0 && pago.abono > 0) {
+                        const cantidadARestar = Math.min(saldoAbono, pago.abono);
+                        pago.abono -= cantidadARestar;
+                        saldoAbono -= cantidadARestar;
+                    }
+
+                    if (saldoAbono <= 0) {
+                        break;
+                    }
+                }
+
+                console.log("act: ", pagosActualizados);
+
+                for (const pago of pagosActualizados){
+
+                    const validar = ((pago.cantidad - pago.abono) + (pago.interes - pago.abono_interes)) <= 0;
+
+                    if(validar){
+                        await connection.execute(
+                            `
+                            UPDATE abonos_programados SET abono_interes = ?, abono = ? WHERE idAbonoProgramado = ?; 
+                            `,[pago.abono_interes, pago.abono, pago.idAbonoProgramado]
+                        );
+                    }else{
+                        await connection.execute(
+                            `
+                            UPDATE abonos_programados SET abono_interes = ?, abono = ?, pagado = 0, fecha_liquido = NULL WHERE idAbonoProgramado = ?; 
+                            `,[pago.abono_interes, pago.abono, pago.idAbonoProgramado], 
+                        );
+                    }
+
+                }
+                
+                return "Abono cancelado."
+
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error cancelando abono.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        }
     }
     
 };

@@ -7,6 +7,7 @@ const paymentSchema = `#graphql
     }
 
     type Abono {
+        id: Int!
         fecha: String!
         cliente: String!
         abono: Float!
@@ -46,6 +47,7 @@ const paymentSchema = `#graphql
 
     type Mutation {
         insertPayment(abono: Float, idVenta: Int, saldo_anterior: Float, saldo_nuevo: Float, liquidado: Int): String
+        cancelPayment(idAbono: Int): String
     }
     
     

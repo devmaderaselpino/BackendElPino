@@ -52,6 +52,7 @@ const salesSchema = `#graphql
         pendiente: Float
         atrasado: Float
         interes: Float
+        total: Float
     }
 
     input ProductSale {
