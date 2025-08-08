@@ -333,12 +333,25 @@ const salesResolver = {
         getProducts: async (parent) => {
             const [products] = await connection.query(
                 `SELECT 
-                    p.descripcion, pv.id,
+                    p.descripcion, pv.id, pv.idProducto,
                     pv.cantidad,
                     pv.precio, p.img_producto 
                     FROM productos_venta pv
                     INNER JOIN productos p ON pv.idProducto = p.idProducto
                     WHERE pv.idVenta = ? AND pv.cantidad > 0`,
+                [parent.idVenta]
+            );
+            return products;
+        },
+        getCancelados: async (parent) => {
+            const [products] = await connection.query(
+                `SELECT 
+                    p.descripcion, pc.id, pc.idProducto,
+                    pc.cantidad,
+                    pc.precio, p.img_producto 
+                    FROM productos_cancelados pc
+                    INNER JOIN productos p ON pc.idProducto = p.idProducto
+                    WHERE pc.idVenta = ? AND pc.cantidad > 0`,
                 [parent.idVenta]
             );
             return products;
@@ -457,12 +470,17 @@ const salesResolver = {
 
             try {
                 
-                const { idVenta, productos, totalCancelado } = input;
+                const { idVenta, productos, totalCancelado, historial } = input;
 
                 await connection.execute(
                     `
                        UPDATE abonos_programados SET status = 0 WHERE idVenta = ?; 
                     `,[idVenta]
+                );
+
+                const [[totalCancela]] = await connection.query(
+                    `SELECT COUNT(*) AS cancelacion FROM productos_cancelados WHERE idVenta = ?`,
+                    [idVenta]
                 );
 
                 const [[abonos]] = await connection.query(
@@ -500,6 +518,17 @@ const salesResolver = {
                         `,[producto.cantidad, idVenta, producto.idProducto]
                     );
                 }
+
+                if(totalCancela.cancelacion === 0){
+                    for(const producto of historial){
+                        
+                        const productoVenta = await connection.execute(
+                            `
+                            INSERT INTO productos_cancelados SET idVenta = ?, idProducto = ?, cantidad = ?, precio = ?, fecha = NOW(), usuario_reg = ?; 
+                            `,[idVenta, producto.idProducto, producto.cantidad, producto.precio, ctx.usuario.idUsuario]
+                        );
+                    }
+                }
                 
                 let fecha_programada = format((weekStart(addDay(infoInicial.fecha, 7))),  "YYYY-MM-DD", "en")
 
@@ -519,7 +548,6 @@ const salesResolver = {
                             `,[idVenta, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
                             
                         );
-                        
                     }
 
                     const [pagos] = await connection.query(`
@@ -567,35 +595,6 @@ const salesResolver = {
                 });
             }
         },
-        cancelSale: async(_,{idVenta}, ctx) => {
-            try {
-                await connection.execute(
-                    `
-                        UPDATE ventas SET status = 2 WHERE idVenta = ?; 
-                    `,[idVenta]
-                );
-
-                await connection.execute(
-                    `
-                       UPDATE abonos SET status = 0 WHERE idVenta = ?; 
-                    `,[idVenta]
-                );
-
-                return "Venta cancelada.";
-
-            } catch (error) {
-                console.log(error);
-                
-                throw new GraphQLError("Error cancelando venta.",{
-                    extensions:{
-                        code: "BAD_REQUEST",
-                        http: {
-                            "status" : 400
-                        }
-                    }
-                });
-            }
-        }
     }
     
 };

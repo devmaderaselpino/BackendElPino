@@ -2,6 +2,7 @@ const salesSchema = `#graphql
 
     type SaleDetail {
         id: Int
+        idProducto: Int
         descripcion: String
         cantidad: Int
         precio: Float
@@ -19,6 +20,7 @@ const salesSchema = `#graphql
         status: Int
         tipo: Int
         getProducts: [SaleDetail]
+        getCancelados: [SaleDetail]
     }
 
     type Venta{
@@ -81,6 +83,7 @@ const salesSchema = `#graphql
         idVenta: Int
         productos: [Editar]
         totalCancelado: Float
+        historial: [Editar]
     }
 
     type Query {
@@ -96,7 +99,6 @@ const salesSchema = `#graphql
     type Mutation {
         insertSale(input: NewSale) : String
         editSale(input: EditSale) : String
-        cancelSale(idVenta: Int) : String
     }
     
 `
