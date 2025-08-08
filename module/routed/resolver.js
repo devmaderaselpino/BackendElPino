@@ -41,44 +41,58 @@ const routedResolver = {
                 });
             }
         },
-
         getRutas: async (_, { idCobrador }) => {
-            
             try {
                 const [rows] = await connection.query(`
-                SELECT 
-                    u.idUsuario AS idCobrador,
-                    u.nombre AS nombreCobrador,
-                    c.idCliente,
-                    CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno) AS nombreCliente,
-                    CONCAT('colonia: ', col.nombre, ' calle: ', c.calle, ' num: ', c.numero_ext) AS direccion,
-                    m.nombre AS municipio
-                    FROM asignacion_rutas ar
-                    JOIN usuarios u ON ar.idCobrador = u.idUsuario
-                    JOIN clientes c ON ar.idCliente = c.idCliente
-                    JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
-                    JOIN colonias col ON col.idColonia = c.colonia
-                    JOIN municipios m ON c.municipio = m.idMunicipio
-                    WHERE u.tipo = 3 AND ar.idCobrador = ?
-                    ORDER BY c.nombre
-                    `, [idCobrador]);
+                    SELECT DISTINCT
+                        ar.idRuta,
+                        ar.idCobrador,
+                        u.nombre AS nombreCobrador,
+                        c.idCliente,
+                        CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno) AS nombreCliente,
+                        CONCAT('colonia: ', col.nombre, ' calle: ', c.calle, ' num: ', c.numero_ext) AS direccion,
+                        c.celular,
+                        c.distinguido,
+                        m.nombre AS municipio
+                        FROM asignacion_rutas ar
+                        JOIN usuarios u ON ar.idCobrador = u.idUsuario
+                        LEFT JOIN clientes c ON ar.idCliente = c.idCliente
+                        LEFT JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
+                        LEFT JOIN colonias col ON col.idColonia = c.colonia
+                        LEFT JOIN municipios m ON c.municipio = m.idMunicipio
+                        WHERE ar.idCobrador = ?
+                        ORDER BY ar.idRuta, c.nombre
+                `, [idCobrador]);
 
-                if (rows.length === 0) return [];
+                if (!rows.length) return [];
 
-                    const route = {
-                        idRuta: rows[0].idCobrador,
-                        name: `Ruta de ${rows[0].nombreCobrador}`,
-                        description: `Clientes asignados `,
-                        color: "#3b82f6",
-                        clientes: rows.map(row => ({
+                const rutasMap = new Map();
+
+                for (const row of rows) {
+                    if (!rutasMap.has(row.idRuta)) {
+                        rutasMap.set(row.idRuta, {
+                            idRuta: row.idRuta,
+                            idCobrador: row.idCobrador,
+                            name: `Ruta ${row.idRuta}`,
+                            description: `Ruta del cobrador ${row.nombreCobrador}`,
+                            color: "#026804", 
+                            clientes: [],
+                        });
+                    }
+
+                    if (row.idCliente) {
+                        rutasMap.get(row.idRuta).clientes.push({
                             idCliente: row.idCliente,
                             nombreCliente: row.nombreCliente,
                             direccion: row.direccion,
+                            celular: row.celular,
                             municipio: row.municipio,
-                        })),
-                    };
+                            distinguido: row.distinguido || 0,
+                        });
+                    }
+                }
 
-                return [route];
+                return Array.from(rutasMap.values());
             } catch (error) {
                 console.error(error);
                 throw new GraphQLError("Error al obtener las rutas.", {
@@ -129,40 +143,84 @@ const routedResolver = {
                 return [];
             }
         }
-
     },
 
     Mutation: {
         asignarClienteARuta: async (_, { input }) => {
-            const { idCobrador, idCliente } = input;
-            
-            try {
-                const [result] = await connection.query(
-                    `INSERT INTO asignacion_rutas (idCobrador, idCliente)
-                        SELECT ?, c.idCliente
+                const { idCobrador, idCliente, idRuta } = input;
+
+                try {
+                    const [result] = await connection.query(
+                        `INSERT INTO asignacion_rutas (idRuta, idCobrador, idCliente)
+                        SELECT ?, ?, c.idCliente
                         FROM clientes c
                         JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
                         WHERE c.idCliente = ?;`,
-                    [idCobrador, idCliente]
+                        [idRuta, idCobrador, idCliente]
+                    );
+
+                    return result.affectedRows > 0;
+                } catch (error) {
+                    console.error(error);
+                    throw new GraphQLError("Error al asignar cliente a una ruta.", {
+                        extensions: { code: "BAD_REQUEST", http: { status: 400 } },
+                    });
+                }
+        },
+        eliminarClienteDeRuta: async (_, { input }) => {
+            const { idCliente } = input;
+            try {
+                const [result] = await connection.query(
+                    `DELETE ar
+                        FROM asignacion_rutas ar
+                        JOIN clientes c ON ar.idCliente = c.idCliente
+                        JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
+                        WHERE ar.idCliente = ?;`,
+                    [idCliente]
                 );
-                return result.affectedRows > 0;
+                return true;
             } catch (error) {
                 console.error(error);
-                throw new GraphQLError("Error al asignar cliente a un cobrador. con venta activa", {
+                throw new GraphQLError("Error al eliminar la asignación.", {
                     extensions: { code: "BAD_REQUEST", http: { status: 400 } },
                 });
+            }
+        },
+        crearRuta: async (_, { idCobrador }) => {
+            try {
+               
+                const [result] = await connection.query(
+                    `SELECT MAX(idRuta) as maxRuta FROM asignacion_rutas WHERE idCobrador = ?`,
+                    [idCobrador]
+                );
+
+                const nuevoIdRuta = (result[0].maxRuta || 0) + 1;
+
+                await connection.query(
+                    `INSERT INTO asignacion_rutas (idRuta, idCobrador, idCliente) VALUES (?, ?, NULL)`,
+                    [nuevoIdRuta, idCobrador]
+                );
+
+                return {
+                    success: true,
+                    message: 'Ruta creada exitosamente',
+                    idRuta: nuevoIdRuta
+                };
+            } catch (error) {
+                console.error('Error al crear la ruta:', error);
+                throw new GraphQLError('Error al crear la ruta');
             }
         },
         eliminarClienteDeRuta: async (_, { input }) => {
             const { idCliente } = input;
             try {
                 const [result] = await connection.query(
-                `DELETE ar
-                    FROM asignacion_rutas ar
-                    JOIN clientes c ON ar.idCliente = c.idCliente
-                    JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
-                    WHERE ar.idCliente = ?;`,
-                [idCliente]
+                    `DELETE ar
+                        FROM asignacion_rutas ar
+                        JOIN clientes c ON ar.idCliente = c.idCliente
+                        JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
+                        WHERE ar.idCliente = ?;`,
+                    [idCliente]
                 );
                 return true;
             } catch (error) {
