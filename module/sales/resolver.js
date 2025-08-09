@@ -13,7 +13,7 @@ const salesResolver = {
                     `   
                         SELECT IFNULL(SUM(total),0) AS total FROM ventas
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE()) AND YEAR(ventas.fecha) = YEAR(CURDATE())
+                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE()) AND YEAR(ventas.fecha) = YEAR(CURDATE()) AND ventas.status <> 2
                     `, [tipo]
                 );
 
@@ -22,7 +22,7 @@ const salesResolver = {
                         SELECT IFNULL(SUM(total),0) AS total FROM ventas
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
                             WHERE MONTH(ventas.fecha) = MONTH(CURDATE() - INTERVAL 1 MONTH)
-                            AND YEAR(ventas.fecha) = YEAR(CURDATE() - INTERVAL 1 MONTH)
+                            AND YEAR(ventas.fecha) = YEAR(CURDATE() - INTERVAL 1 MONTH) AND ventas.status <> 2
 
                     `, [tipo]
                 );
@@ -72,7 +72,7 @@ const salesResolver = {
             }
 
             const [ventas] = await connection.query(
-                `SELECT * FROM ventas WHERE idCliente = ? ${queryStatus}`,
+                `SELECT * FROM ventas WHERE idCliente = ? ${queryStatus} ORDER BY fecha DESC`,
                 [idCliente]
             );
             return ventas;
