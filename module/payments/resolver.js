@@ -13,7 +13,7 @@ const paymentResolver = {
                         SELECT IFNULL(SUM(abono),0) total FROM abonos
                             INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE()) AND YEAR(abonos.fecha_reg) = YEAR(CURDATE())
+                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE()) AND YEAR(abonos.fecha_reg) = YEAR(CURDATE()) AND abonos.status = 1
                     `, [tipo]
                 );
 
@@ -23,7 +23,7 @@ const paymentResolver = {
                             INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
                             WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE() - INTERVAL 1 MONTH)
-                            AND YEAR(abonos.fecha_reg) = YEAR(CURDATE() - INTERVAL 1 MONTH)
+                            AND YEAR(abonos.fecha_reg) = YEAR(CURDATE() - INTERVAL 1 MONTH) AND abonos.status = 1
 
                     `, [tipo]
                 );
@@ -62,7 +62,7 @@ const paymentResolver = {
                     SELECT 
                         DATE_FORMAT(a.fecha_reg, '%Y-%m-%d') AS fecha,
                         CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
-                        a.abono AS abono, a.id,
+                        a.abono AS abono, a.id, a.tipo,
                         CASE a.tipo
                         WHEN 1 THEN 'Abono'
                         WHEN 2 THEN 'Enganche'
@@ -248,11 +248,14 @@ const paymentResolver = {
 
                 const [[datos]] = await connection.query(
                     `   
-                       	
                         SELECT abono, idVenta FROM abonos WHERE id = ?
-
-
                     `, [idAbono]
+                );
+
+                await connection.execute(
+                    `
+                       INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
+                    `,[idAbono, datos.abono, ctx.usuario.idUsuario]
                 );
 
                 await connection.execute(
@@ -266,8 +269,6 @@ const paymentResolver = {
                         SELECT idAbonoProgramado, cantidad, abono, interes, abono_interes FROM abonos_programados WHERE idVenta = ? AND (abono > 0 || abono_interes > 0) AND status = 1 ORDER BY idAbonoProgramado DESC;
                     `, [datos.idVenta]
                 )
-
-                console.log(abonos);
 
                 let saldoAbono = datos.abono;
                 let pagosActualizados = [...abonos];
@@ -293,8 +294,6 @@ const paymentResolver = {
                     }
                 }
 
-                console.log("act: ", pagosActualizados);
-
                 for (const pago of pagosActualizados){
 
                     const validar = ((pago.cantidad - pago.abono) + (pago.interes - pago.abono_interes)) <= 0;
@@ -314,6 +313,26 @@ const paymentResolver = {
                     }
 
                 }
+
+                const [[venta]] = await connection.query(
+                    `   
+                        SELECT status FROM ventas WHERE idVenta = ?
+                    `, [datos.idVenta]
+                );
+
+                if(venta.status === 0){
+                    await connection.execute(
+                        `
+                        UPDATE ventas SET status = 1 WHERE idVenta = ?; 
+                        `,[datos.idVenta], 
+                    );
+                }
+
+                await connection.execute(
+                    `
+                        UPDATE abonos_programados SET pagado = 0, fecha_liquido = NULL WHERE ((cantidad - abono) + (interes - abono_interes)) > 0 AND idVenta = ?; 
+                    `,[datos.idVenta], 
+                );
                 
                 return "Abono cancelado."
 

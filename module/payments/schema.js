@@ -13,6 +13,7 @@ const paymentSchema = `#graphql
         abono: Float!
         tipo_abono: String!
         cobrador: String!
+        tipo: Int
     }
 
     type TablaPago {
