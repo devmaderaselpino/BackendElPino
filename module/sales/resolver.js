@@ -495,7 +495,7 @@ const salesResolver = {
 
                 const [[infoInicial]] = await connection.query(
                     `SELECT
-                        total - ? AS restante, tipo, fecha
+                        total - ? AS restante, tipo, fecha, idCliente
                         FROM ventas WHERE idVenta = ?`,
                     [totalCancelado, idVenta]
                 );
@@ -538,14 +538,23 @@ const salesResolver = {
                     plazo = 12;
                 }
 
+                if(infoInicial.restante === 0 && (abonos.total_enganche + abonosA.total_abonado) > 0){
+                    await connection.execute(
+                        `
+                            INSERT INTO saldo_favor SET idCliente = ?, cantidad = ? 
+                        `,[infoInicial.idCliente, (abonos.total_enganche + abonosA.total_abonado)]
+                        
+                    )
+                }
+
                 if(infoInicial.restante > 0){
                     for( let index = 0; index < plazo; index++ ){
                         fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
     
                         const abonoProgramados = await connection.execute(
                             `
-                                INSERT INTO abonos_programados SET idVenta = ?, idCliente = 1, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                            `,[idVenta, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
+                                INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                            `,[idVenta, infoInicial.idCliente, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
                             
                         );
                     }
