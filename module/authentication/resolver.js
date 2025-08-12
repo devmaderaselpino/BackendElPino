@@ -31,16 +31,17 @@ const authenticationResolver = {
                 }
                 
             } catch (error) {
-                
-                throw new GraphQLError("Error al iniciar sesión",{
-                    extensions:{
+                console.log(error);
+
+                throw new GraphQLError("Error al iniciar sesión", {
+                    extensions: {
                         code: "BAD_REQUEST",
-                        http: {
-                            "status" : 400
-                        }
+                        http: { status: 400 },
+                        originalError: error.message,
                     }
                 });
             }
+
         },
         loginCobrador: async(_,{input}) => {
             try {
