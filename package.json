@@ -1,14 +1,14 @@
 {
-  "name": "backend_clientes",
+  "name": "backend_elpino",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "keywords": [],
-  "author": "Ing. Ronaldo Guillen Flores",
+  "author": "Gaby Solutions.",
   "license": "ISC",
-  "description": "BackEnd para la aplicación de clientes desarrollada por el departamento y pilar de la empresa Prestamaz, SISTEMAS. Así nomás quedó",
+  "description": "BackEnd para la aplicación web de madererías el pino.",
   "type": "module",
   "dependencies": {
     "@apollo/server": "^4.12.0",
