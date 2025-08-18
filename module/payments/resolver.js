@@ -348,7 +348,78 @@ const paymentResolver = {
                     }
                 });
             }
-        }
+        },
+        insertPagoViejo: async(_,{ abono, idVenta }, ctx) => {
+
+            try {
+
+                const [pagos] = await connection.query(`
+                    SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                    [idVenta]
+                );
+
+                let abonoRecibido = abono;
+                
+                for (const item of pagos) {
+                    if (abonoRecibido <= 0) break;
+
+                    const interesPendiente = parseFloat(item.interes - item.abono_interes); 
+                    const capitalPendiente = parseFloat(item.cantidad - item.abono); 
+
+                    if (interesPendiente > 0) {
+                        const abonoParaInteres = Math.min(abonoRecibido, interesPendiente);
+
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono_interes = (abono_interes + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaInteres, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaInteres;
+                        item.abono_interes += abonoParaInteres;
+                    }
+
+                    if (abonoRecibido <= 0) {
+                    
+                        continue;
+                    }
+
+                    if (capitalPendiente > 0) {
+                        const abonoParaCapital = Math.min(abonoRecibido, capitalPendiente);
+
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaCapital, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaCapital;
+                        item.abono += abonoParaCapital; 
+                    }
+
+                    const totalAbonadoInteres = parseFloat(item.abono_interes);
+                    const totalAbonadoCapital = parseFloat(item.abono);
+
+                    if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
+                        await connection.execute(
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
+                            [item.idAbonoProgramado]
+                        );
+                    }
+                }
+
+
+                return "Todo bien"
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error validando abono.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
     }
     
 };

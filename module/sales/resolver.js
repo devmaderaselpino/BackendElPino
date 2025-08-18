@@ -75,6 +75,7 @@ const salesResolver = {
                 `SELECT * FROM ventas WHERE idCliente = ? ${queryStatus} ORDER BY fecha DESC`,
                 [idCliente]
             );
+ 
             return ventas;
         },
         getSaleByClient: async (_, { idVenta }) => {
@@ -327,6 +328,147 @@ const salesResolver = {
                 });
                 
             }
+        },
+        getPorcentajePagado: async (_, {idVenta}) => {
+            try {
+                
+                const [infoVenta]  = await connection.query(
+                    `   
+                       SELECT tipo, fecha, total FROM ventas WHERE idVenta = ?;
+                    `, [idVenta]
+                );
+
+                const [[abonado]] = await connection.query(
+                    `   
+                       SELECT SUM(abono) - SUM(interes) AS total_abonado FROM abonos_programados WHERE idVenta = ? AND status = 1;
+                    `, [idVenta]
+                );
+
+                let diferencia = diffMonths(new Date(), infoVenta[0].fecha);
+
+                if(diferencia < 0) {
+                    diferencia = diferencia * -1;
+                }
+
+                diferencia = diferencia + 1;
+     
+                const [[pendiente]] = await connection.query(
+                    `   
+                       SELECT SUM(cantidad - abono) AS cantidad_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1;
+                    `, [idVenta]
+                );
+                
+                let descuento = 0;
+                
+                let totalPendiente = pendiente.cantidad_pendiente;
+
+                if(infoVenta[0].tipo === 2){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.15;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 5: 
+                            descuento = infoVenta[0].total * 0.05;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                } else if(infoVenta[0].tipo === 3){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.18;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.16;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 5:
+                            descuento = infoVenta[0].total * 0.14;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 6:
+                            descuento = infoVenta[0].total * 0.12;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 7:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 8:
+                            descuento = infoVenta[0].total * 0.08;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 9:
+                            descuento = infoVenta[0].total * 0.06;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 10:
+                            descuento = infoVenta[0].total * 0.04;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 11:
+                            descuento = infoVenta[0].total * 0.02;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                }
+
+                const [[info]] = await connection.query(
+                    `   
+                        SELECT (SUM(abono) * 100) / ? AS porcentaje_abonado FROM abonos_programados WHERE idVenta = ? AND status = 1;
+                    `, [totalPendiente, idVenta]
+                );
+
+                const [[nombre_cliente]] = await connection.query(
+                    `   
+                        SELECT CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente FROM ventas 
+                            INNER JOIN clientes c ON ventas.idCliente = c.idCliente
+                            WHERE idVenta = ?;
+                    `, [idVenta]
+                );
+
+                return {
+                    nombre: nombre_cliente.nombre_cliente,
+                    porcentaje_abonado: info.porcentaje_abonado,
+                    abonos_total: abonado.total_abonado
+                };
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener porcentaje.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
         }
     },
     Sale: {
@@ -354,6 +496,7 @@ const salesResolver = {
                     WHERE pc.idVenta = ? AND pc.cantidad > 0`,
                 [parent.idVenta]
             );
+           
             return products;
         },
     },
@@ -470,48 +613,21 @@ const salesResolver = {
 
             try {
                 
-                const { idVenta, productos, totalCancelado, historial } = input;
-
-                await connection.execute(
-                    `
-                       UPDATE abonos_programados SET status = 0 WHERE idVenta = ?; 
-                    `,[idVenta]
-                );
+                const { idVenta, productos, totalCancelado, historial, opcion, saldo } = input;
 
                 const [[totalCancela]] = await connection.query(
                     `SELECT COUNT(*) AS cancelacion FROM productos_cancelados WHERE idVenta = ?`,
                     [idVenta]
                 );
 
-                const [[abonos]] = await connection.query(
-                    `SELECT IFNULL(SUM(abono),0) AS total_enganche FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 2`,
-                    [idVenta]
-                );
-
-                const [[abonosA]] = await connection.query(
-                    `SELECT IFNULL(SUM(abono),0) AS total_abonado FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 1`,
-                    [idVenta]
-                );
-
-                const [[infoInicial]] = await connection.query(
-                    `SELECT
-                        total - ? AS restante, tipo, fecha, idCliente
-                        FROM ventas WHERE idVenta = ?`,
-                    [totalCancelado, idVenta]
-                );
-
-                const tipo = infoInicial.tipo = 3 && infoInicial.restante < 3500 ? 2 : infoInicial.tipo;
-
-                const estatus = infoInicial.restante > 0 ? 1 : 2;
-
                 await connection.execute(
                     `
-                        UPDATE ventas SET total = total - ?, tipo = ?, status = ? WHERE idVenta = ?; 
-                    `,[totalCancelado, tipo, estatus, idVenta]
+                        UPDATE abonos_programados SET status = 0 WHERE idVenta = ?; 
+                    `,[idVenta]
                 );
 
                 for(const producto of productos){
-                    
+                        
                     const productoVenta = await connection.execute(
                         `
                         UPDATE productos_venta SET cantidad = cantidad - ? WHERE idVenta = ? AND id = ?; 
@@ -529,64 +645,149 @@ const salesResolver = {
                         );
                     }
                 }
+
+                const [[abonos]] = await connection.query(
+                    `SELECT IFNULL(SUM(abono),0) AS total_enganche FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 2`,
+                    [idVenta]
+                );
+
+                const [[abonosA]] = await connection.query(
+                    `SELECT IFNULL(SUM(abono),0) AS total_abonado FROM abonos WHERE idVenta = ? AND status = 1 AND tipo = 1`,
+                    [idVenta]
+                );
+
+                const [[infoInicial]] = await connection.query(
+                    `
+                        SELECT total - ? AS restante, tipo, fecha, idCliente
+                        FROM ventas WHERE idVenta = ?
+                    `,
+                    [totalCancelado, idVenta]
+                );
+
+                const [abonosActivos] = await connection.query(
+                    `
+                        SELECT id, abono FROM abonos WHERE idVenta = ? AND status = 1
+                    `,
+                    [idVenta]
+                );
                 
-                let fecha_programada = format((weekStart(addDay(infoInicial.fecha, 7))),  "YYYY-MM-DD", "en")
+                if(opcion === 1){
 
-                let plazo = 6;
-
-                if(infoInicial.tipo === 3){
-                    plazo = 12;
-                }
-
-                if(infoInicial.restante === 0 && (abonos.total_enganche + abonosA.total_abonado) > 0){
                     await connection.execute(
                         `
-                            INSERT INTO saldo_favor SET idCliente = ?, cantidad = ? 
-                        `,[infoInicial.idCliente, (abonos.total_enganche + abonosA.total_abonado)]
-                        
-                    )
-                }
+                            UPDATE ventas SET total = total - ?, status = 2 WHERE idVenta = ?; 
+                        `,[totalCancelado, idVenta]
+                    );
 
-                if(infoInicial.restante > 0){
-                    for( let index = 0; index < plazo; index++ ){
-                        fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
-    
-                        const abonoProgramados = await connection.execute(
+                    await connection.execute(
+                        `
+                            UPDATE abonos SET status = 0 WHERE idVenta = ? AND status = 1; 
+                        `,[idVenta]
+                    );
+
+                    for (const item of abonosActivos){
+                        await connection.execute(
                             `
-                                INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                            `,[idVenta, infoInicial.idCliente, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
-                            
+                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
+                            `,[item.id, item.abono, ctx.usuario.idUsuario]
                         );
                     }
 
-                    const [pagos] = await connection.query(`
-                        SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
-                        [idVenta]
+                }
+
+                if(opcion === 2){
+
+                    await connection.execute(
+                        `
+                            UPDATE ventas SET total = total - ?, status = 2 WHERE idVenta = ?; 
+                        `,[totalCancelado, idVenta]
                     );
 
-                    let abonoRecibido = abonosA.total_abonado;
-                    
-                    for (const item of pagos) {
-                        
-                        const pendiente = parseFloat(item.cantidad - item.abono);
-                        if (abonoRecibido <= 0) break;
+                    if(saldo > 0){
+                        await connection.execute(
+                            `
+                                INSERT INTO saldo_favor SET idCliente = ?, cantidad = ? 
+                            `,[infoInicial.idCliente, saldo]
+                            
+                        )
+                    }
 
-                        const abonoAportado = Math.min(abonoRecibido, pendiente);
+                    await connection.execute(
+                        `
+                            UPDATE abonos SET status = 0 WHERE idVenta = ? AND status = 1; 
+                        `,[idVenta]
+                    );
 
-                        if((abonoAportado + item.abono) === item.cantidad){
-                            await connection.execute(
-                                `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
-                                [abonoAportado, item.idAbonoProgramado]
-                            )
-                        }else{
-                            await connection.execute(
-                                `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
-                                [abonoAportado, item.idAbonoProgramado]
-                            )
+                    for (const item of abonosActivos){
+                        await connection.execute(
+                            `
+                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
+                            `,[item.id, item.abono, ctx.usuario.idUsuario]
+                        );
+                    }
+
+                }
+
+                if(opcion === 3){
+
+                    const tipo = infoInicial.tipo = 3 && infoInicial.restante < 3500 ? 2 : infoInicial.tipo;
+
+                    await connection.execute(
+                        `
+                            UPDATE ventas SET total = total - ?, tipo = ? WHERE idVenta = ?; 
+                        `,[totalCancelado, tipo, idVenta]
+                    );
+
+                    let fecha_programada = format((weekStart(addDay(infoInicial.fecha, 7))),  "YYYY-MM-DD", "en")
+
+                    let plazo = 6;
+
+                    if(infoInicial.tipo === 3){
+                        plazo = 12;
+                    }
+
+                    if(infoInicial.restante > 0){
+                        for( let index = 0; index < plazo; index++ ){
+                            fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
+        
+                            const abonoProgramados = await connection.execute(
+                                `
+                                    INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
+                                `,[idVenta, infoInicial.idCliente, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
+                                
+                            );
                         }
 
-                        abonoRecibido -= abonoAportado;
+                        const [pagos] = await connection.query(`
+                            SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                            [idVenta]
+                        );
+
+                        let abonoRecibido = abonosA.total_abonado;
+                        
+                        for (const item of pagos) {
+                            
+                            const pendiente = parseFloat(item.cantidad - item.abono);
+                            if (abonoRecibido <= 0) break;
+
+                            const abonoAportado = Math.min(abonoRecibido, pendiente);
+
+                            if((abonoAportado + item.abono) === item.cantidad){
+                                await connection.execute(
+                                    `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
+                                    [abonoAportado, item.idAbonoProgramado]
+                                )
+                            }else{
+                                await connection.execute(
+                                    `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                                    [abonoAportado, item.idAbonoProgramado]
+                                )
+                            }
+
+                            abonoRecibido -= abonoAportado;
+                        }
                     }
+
                 }
 
                 return "Modificación realizada."

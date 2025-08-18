@@ -12,9 +12,16 @@ const locationResolver = {
             try {
                const [colonias] = await connection.query(
                     `   
-                        SELECT 0 AS idColonia, "Todas las colonias" AS nombre
-                        UNION
-                        SELECT idColonia, nombre FROM colonias WHERE status = 1 ${query};
+                        SELECT *
+                        FROM (
+                            SELECT 0 AS idColonia, 'Todas las colonias' AS nombre, 0 AS orden
+                            UNION
+                            SELECT idColonia, nombre, 1 AS orden
+                            FROM colonias
+                            WHERE status = 1 ${query}
+                            ORDER BY nombre ASC
+                        ) AS t
+                        ORDER BY orden, nombre;
                     `,
                 );
                 
@@ -93,6 +100,7 @@ const locationResolver = {
                     `
                         SELECT idMunicipio, nombre, status FROM municipios
                             ${where}
+                            ORDER BY nombre ASC
                             LIMIT ? OFFSET ?
                     `,
                     params
@@ -111,7 +119,6 @@ const locationResolver = {
                 });
             }
         },
-
         getColoniasPaginated: async (_,{ input }) => {
 
             const { skip, limit, searchName } = input;
@@ -150,6 +157,7 @@ const locationResolver = {
                             FROM colonias c
                             INNER JOIN municipios m ON c.idMunicipio = m.idMunicipio
                             ${where}
+                            ORDER BY c.nombre ASC
                             LIMIT ? OFFSET ?
                     `,
                     params
@@ -168,7 +176,6 @@ const locationResolver = {
                 });
             }
         },
-        
         getColonia: async (_,{idColonia}) => {
            
             try {
@@ -196,9 +203,11 @@ const locationResolver = {
             
             try {
                const [municipios] = await connection.query(
-                    `   SELECT 0 AS idMunicipio, "Todos los municipios" AS nombre
-                        UNION
-                        SELECT idMunicipio, nombre FROM municipios WHERE status = 1;
+                    `   SELECT *
+                            FROM (SELECT 0 AS idMunicipio, "Todos los municipios" AS nombre, 0 AS orden
+                            UNION
+                            SELECT idMunicipio, nombre, 1 AS orden FROM municipios WHERE STATUS = 1 ORDER BY nombre ASC ) AS t
+                            ORDER BY orden, nombre;
                     `,
                 );
                 

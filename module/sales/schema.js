@@ -57,6 +57,12 @@ const salesSchema = `#graphql
         total: Float
     }
 
+    type InfoPorcentaje {
+        nombre: String
+        porcentaje_abonado: Float
+        abonos_total: Float
+    }
+
     input ProductSale {
         idProducto: Int
         cantidad: Int
@@ -84,6 +90,8 @@ const salesSchema = `#graphql
         productos: [Editar]
         totalCancelado: Float
         historial: [Editar]
+        opcion: Int
+        saldo: Float
     }
 
     type Query {
@@ -94,6 +102,7 @@ const salesSchema = `#graphql
         getClientStats(idCliente: Int): ClientStats
         GetVentas: [Venta]
         getTotalsBySale(idVenta: Int): SaleTotals
+        getPorcentajePagado(idVenta: Int): InfoPorcentaje
     }
     
     type Mutation {
