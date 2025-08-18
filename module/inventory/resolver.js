@@ -171,7 +171,7 @@ const inventoryResolver = {
                         p.descripcion AS nombre,
                         c.descripcion AS categoria,
                         p.precio,
-                        P.img_producto,
+                        p.img_producto,
                         p.status,
                         ir.stock AS stock_rosario,
                         ir.min_stock AS min_stock_rosario,
