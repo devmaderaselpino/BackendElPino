@@ -18,6 +18,7 @@ const cobradorSchema = `#graphql
         getInfoCobrador: Cobrador
         getCobranza: Cobranza
         getAbonosRango(fechaInicial: String, fechaFinal: String): Float
+        getAbonosRangoCobrador(idCobrador: Int!, fechaInicial: String!, fechaFinal: String!): Float!
     }
     
 `

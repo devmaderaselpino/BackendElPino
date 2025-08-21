@@ -32,6 +32,7 @@ const inventorySchema = `#graphql
         stock_escuinapa: Int
         min_stock_escuinapa: Int
         status: Int
+        img_producto: String
     }
     type Ajuste {
         id: Int!

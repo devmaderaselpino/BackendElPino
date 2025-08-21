@@ -594,6 +594,12 @@ const salesResolver = {
                     }
                 }
 
+                await connection.execute(
+                    `
+                       UPDATE saldo_favor SET status = 0 WHERE idCliente = ?; 
+                    `,[idCliente]
+                );
+
                 return "Venta realizada."
                 
             } catch (error) {
@@ -706,7 +712,7 @@ const salesResolver = {
                     if(saldo > 0){
                         await connection.execute(
                             `
-                                INSERT INTO saldo_favor SET idCliente = ?, cantidad = ? 
+                                INSERT INTO saldo_favor SET idCliente = ?, cantidad = ?, vencimiento = DATE_ADD(CURDATE(), INTERVAL 2 MONTH)
                             `,[infoInicial.idCliente, saldo]
                             
                         )

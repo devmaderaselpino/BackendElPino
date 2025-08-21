@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "@apollo/server": "^4.12.0",
+    "@aws-sdk/client-s3": "^3.872.0",
     "@formkit/tempo": "^0.1.2",
     "@graphql-tools/merge": "^9.0.24",
     "@graphql-tools/schema": "^10.0.23",
@@ -23,6 +24,8 @@
     "graphql": "^16.10.0",
     "graphql-tools": "^9.0.18",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.14.0"
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.0",
+    "nanoid": "^5.1.5"
   }
 }

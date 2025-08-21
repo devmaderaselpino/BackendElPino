@@ -94,13 +94,17 @@ const clientResolver = {
                 );
 
                 params.push(limit, skip);
+
                 const [items] = await connection.query(
                     `
-                        SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n 
+                        SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n,
+                            IFNULL(SUM(sf.cantidad),0) AS saldo_favor
                             FROM clientes c
                             INNER JOIN municipios m ON c.municipio = m.idMunicipio
                             INNER JOIN colonias co ON c.colonia = co.idColonia
+                            LEFT JOIN saldo_favor sf ON c.idCliente = sf.idCliente AND sf.vencimiento >= CURDATE() AND sf.status = 1
                             ${where}
+                            GROUP BY c.idCliente
                             LIMIT ? OFFSET ?
                     `,
                     params
@@ -148,19 +152,22 @@ const clientResolver = {
             }
         },
         getClient: async (_,{idCliente}) => {
-            console.log(idCliente);
             
             try {
                 const [clients] = await connection.query(
                     `   
-                        SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n 
+                        SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n, IFNULL(doc.url, "") AS url 
                             FROM clientes c
                             INNER JOIN municipios m ON c.municipio = m.idMunicipio
                             INNER JOIN colonias co ON c.colonia = co.idColonia
-                            WHERE c.idCliente = ?
+                            LEFT JOIN documentos doc ON c.idCliente = doc.idCliente
+                            WHERE c.idCliente = ? ORDER BY doc.id DESC LIMIT 1
                     `, [idCliente]
                 );
+
+                console.log(clients[0]);
                 
+
                 return clients[0];
             } catch (error) {
                 console.log(error);

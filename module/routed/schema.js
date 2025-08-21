@@ -3,7 +3,8 @@ const routedSchema = `#graphql
     type Cobrador {
         idUsuario: Int
         nombre: String
-        Apaterno: String
+        aPaterno: String
+        aMaterno: String
         celular: String
     }
 
@@ -12,7 +13,8 @@ const routedSchema = `#graphql
         nombreCliente: String!
         direccion: String!
         municipio: String!
-        distinguido: Int
+        celular: String!
+        distinguido: Int!
     }
 
     type Ruta {
@@ -28,6 +30,16 @@ const routedSchema = `#graphql
         message: String!
         idRuta: Int
     }
+    
+    type CrearRuta{
+        success: Boolean!
+        message: String
+        idRuta: Int
+    }
+    type ClientesPorCobrador {
+        idCobrador: ID!
+        total_clientes: Int!
+    }
 
     input AsignacionRutaInput {
         idCobrador: Int!
@@ -36,6 +48,8 @@ const routedSchema = `#graphql
     }
 
     input EliminarAsignacionInput {
+        idCobrador: Int!
+        idRuta: Int!
         idCliente: Int!
     }
 
@@ -44,12 +58,13 @@ const routedSchema = `#graphql
         getClientesSinAsignar: [Cliente!]!
         getRutas(idCobrador: Int!): [Ruta]
         getClientesByCobrador(nombre: String, tipo: Int): [Cliente]
+        getTotalesClientesAsignados: [ClientesPorCobrador!]!
     }
 
     type Mutation {
         asignarClienteARuta(input: AsignacionRutaInput!): Boolean
         eliminarClienteDeRuta(input: EliminarAsignacionInput!): Boolean
-        crearRuta(idCobrador: Int!): CrearRutaResponse!
+        crearRuta(idCobrador: Int!): CrearRuta!
     }
 
 `;

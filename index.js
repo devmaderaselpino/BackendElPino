@@ -7,12 +7,18 @@ import http from 'http'
 import { ApolloServerPluginDrainHttpServer } from "@apollo/server/plugin/drainHttpServer";
 import cors from 'cors';
 import jsonwebtoken from 'jsonwebtoken';
+import uploadRoutes from './routes/uploadR2.js';
 
 var usuario;
 
 const app = express();
 app.use(express.json({limit:"200mb"}))
+app.use(cors());
 const httpServer = http.createServer(app);
+
+app.get("/health", (_req, res) => res.send("ok"));
+
+app.use("/upload", uploadRoutes);
 
 const server = new ApolloServer({
     schema,

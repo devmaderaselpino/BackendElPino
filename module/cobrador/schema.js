@@ -95,6 +95,27 @@ const cobradorResolver = {
                 });
             }
         },
+        getAbonosRangoCobrador: async (_, { idCobrador, fechaInicial, fechaFinal }, ctx) => {
+            try {
+                const [rows] = await connection.query(
+                    `
+                    SELECT COALESCE(SUM(abono), 0) AS total_cobrado
+                    FROM abonos
+                    WHERE usuario_reg = ?
+                    AND tipo = 1
+                    AND status = 1
+                    AND fecha_reg BETWEEN ? AND ?
+                    `,
+                    [idCobrador, fechaInicial, fechaFinal]
+                );
+                return Number(rows?.[0]?.total_cobrado || 0);
+            } catch (error) {
+                console.error(error);
+                throw new GraphQLError("Error al obtener cobranza del usuario.", {
+                    extensions: { code: "BAD_REQUEST", http: { status: 400 } }
+                });
+            }
+        }
     },
 };
 

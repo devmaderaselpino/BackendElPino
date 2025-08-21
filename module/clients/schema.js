@@ -17,6 +17,8 @@ const clientsSchema = `#graphql
         descripcion: String
         fecha_reg: String
         status: Int
+        saldo_favor: Float
+        url: String
     }
 
     type ClientsPaginated {
