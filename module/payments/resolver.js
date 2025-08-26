@@ -163,6 +163,7 @@ const paymentResolver = {
                     [idVenta]
                 );
 
+                let totalTicket = 0;
                 let abonoRecibido = abono;
                 
                 for (const item of pagos) {
@@ -199,6 +200,7 @@ const paymentResolver = {
                     }
 
                     const totalAbonadoInteres = parseFloat(item.abono_interes);
+                    totalTicket = totalAbonadoInteres;
                     const totalAbonadoCapital = parseFloat(item.abono);
 
                     if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
@@ -228,7 +230,12 @@ const paymentResolver = {
                     )
                 }
 
-                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6941166060\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: $0.00\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: $0.00\n\n      GRACIAS POR SU PAGO!`
+                const [[interes]] = await connection.query(`
+                    SELECT SUM(interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6941166060\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes - totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\n\n      GRACIAS POR SU PAGO!`
                 
             } catch (error) {
                 console.log(error);

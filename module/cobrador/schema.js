@@ -51,12 +51,39 @@ const cobradorResolver = {
                             3500.00 AS meta_cobranza
                             FROM abonos
                             WHERE usuario_reg = ?
-                            AND tipo = 1;
+                            AND tipo = 1 AND status = 1;
                     `,
                     [ctx.usuario.idUsuario]
                 );
 
-                return cobranza[0];
+                const [cobranza_ofi]  = await connection.query(
+                    `
+                        SELECT 
+                            SUM(CASE 
+                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(CURDATE(), 1) 
+                                THEN a.abono 
+                                ELSE 0 
+                                END) AS semana_actual,
+                            SUM(CASE 
+                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(CURDATE() - INTERVAL 1 WEEK, 1) 
+                                THEN a.abono 
+                                ELSE 0 
+                                END) AS semana_anterior
+                            FROM asignacion_rutas ar 
+                            INNER JOIN ventas v ON ar.idCliente = v.idCliente AND v.status = 1
+                            INNER JOIN abonos a ON v.idVenta = a.idVenta AND a.status = 1 AND a.usuario_reg <> ? AND a.tipo = 1
+                            WHERE ar.idCobrador = ? AND ar.status = 1
+                    `,
+                    [ctx.usuario.idUsuario, ctx.usuario.idUsuario]
+                );
+
+                const result = {
+                    semana_actual: cobranza[0].semana_actual + cobranza_ofi[0].semana_actual,
+                    semana_anterior: cobranza[0].semana_anterior + cobranza_ofi[0].semana_anterior,
+                    meta_cobranza: cobranza[0].meta_cobranza
+                }
+
+                return result;
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error al obtener cobranza del usuario.", {

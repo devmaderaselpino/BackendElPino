@@ -15,6 +15,8 @@ const routedSchema = `#graphql
         municipio: String!
         celular: String!
         distinguido: Int!
+        abonos_atrasados: Int
+        num_pendientes: Int
     }
 
     type Ruta {
@@ -57,7 +59,7 @@ const routedSchema = `#graphql
         getCobradores: [Cobrador]
         getClientesSinAsignar: [Cliente!]!
         getRutas(idCobrador: Int!): [Ruta]
-        getClientesByCobrador(nombre: String, tipo: Int): [Cliente]
+        getClientesByCobrador(nombre: String): [Cliente]
         getTotalesClientesAsignados: [ClientesPorCobrador!]!
     }
 
