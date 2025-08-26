@@ -96,7 +96,7 @@ const employeesResolver = {
                 const empleado = await connection.execute(
                     `
                        INSERT INTO usuarios SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, tipo = ?, usuario = ?, password = ?; 
-                    `, [nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, tipo, usuario, password]
+                    `, [nombre.toUpperCase(), aPaterno.toUpperCase(), aMaterno.toUpperCase(), municipio, colonia, calle.toUpperCase(), numero_ext, celular, tipo, usuario, password]
                 );
 
                 return "Empleado insertado";
@@ -123,7 +123,7 @@ const employeesResolver = {
                 const empleado = await connection.execute(
                     `
                        UPDATE usuarios SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, tipo = ?, usuario = ?, password = ? WHERE idUsuario = ?; 
-                    `, [nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, tipo, usuario, password, idUsuario]
+                    `, [nombre.toUpperCase(), aPaterno.toUpperCase(), aMaterno.toUpperCase(), municipio, colonia, calle.toUpperCase(), numero_ext, celular, tipo, usuario, password, idUsuario]
                 );
 
                 return "Empleado actualizado";

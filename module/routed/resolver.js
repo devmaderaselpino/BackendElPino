@@ -63,7 +63,7 @@ const routedResolver = {
                 r.idRuta,
                 c.idCliente,
                 CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno) AS nombreCliente,
-                CONCAT('colonia: ', col.nombre, ' calle: ', c.calle, ' num: ', c.numero_ext) AS direccion,
+                CONCAT('COLONIA: ', col.nombre, ' CALLE: ', c.calle, ' NUM: ', c.numero_ext) AS direccion,
                 m.nombre AS municipio,
                 c.celular,
                 c.distinguido
@@ -157,36 +157,35 @@ const routedResolver = {
                         throw new GraphQLError("Error al obtener totales por cobrador");
                     }
                     },
-                    getClientesByCobrador: async (_, { nombre, tipo }, ctx) => {
+        getClientesByCobrador: async (_, { nombre }, ctx) => {
             try {
                 const condicionNombre = nombre
                 ? `AND CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) LIKE ?`
-                : "";
-
-                const condicionPendientes = tipo === 2
-                ? `AND (
-                    SELECT COUNT(*) FROM abonos_programados ap
-                    WHERE ap.idCliente = ar.idCliente
-                    AND ap.pagado = 0
-                    AND ap.status = 1
-                    AND ap.fecha_programada <= LAST_DAY(CURDATE())
-                ) > 0`
                 : "";
 
                 const query = `
                     SELECT 
                         c.idCliente, c.distinguido,
                         CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombreCliente, 
-                        CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion
+                        CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion,
+                        (SELECT COUNT(*) FROM abonos_programados ap
+                            WHERE ap.idCliente = ar.idCliente
+                            AND ap.pagado = 0
+                            AND ap.status = 1
+                            AND ap.fecha_programada < CURDATE()) AS abonos_atrasados,
+                        (SELECT COUNT(*) FROM abonos_programados ap
+                            WHERE ap.idCliente = ar.idCliente
+                            AND ap.pagado = 0
+                            AND ap.status = 1
+                            AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes
                         FROM asignacion_rutas ar
                         INNER JOIN ventas v ON ar.idCliente = v.idCliente AND v.status = 1
                         INNER JOIN clientes c ON ar.idCliente = c.idCliente
                         INNER JOIN municipios m ON c.municipio = m.idMunicipio
                         INNER JOIN colonias col ON c.colonia = col.idColonia
-                        WHERE ar.idCobrador = ?
+                        WHERE ar.idCobrador = ? AND ar.status = 1
                         ${condicionNombre}
-                        ${condicionPendientes}
-                        GROUP BY ar.idCliente
+                        GROUP BY ar.idCliente ORDER BY abonos_atrasados DESC, num_pendientes DESC
                 `;
 
                 const parametros = [ctx.usuario.idUsuario];

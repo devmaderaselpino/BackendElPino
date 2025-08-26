@@ -353,7 +353,7 @@ const inventoryResolver = {
                 conn = await connection.getConnection(); 
                 const [result] = await conn.query(
                     'INSERT INTO categorias (descripcion) VALUES (?)',
-                    [descripcion]
+                    [descripcion.toUpperCase()]
                 );
 
                 return {
@@ -380,7 +380,7 @@ const inventoryResolver = {
 
                 const [result] = await conn.query(
                     `INSERT INTO productos (descripcion, categoria, precio,img_producto,status) VALUES (?, ?, ?,?,?)`,
-                    [descripcion, categoria, precio,img_producto,status]
+                    [descripcion.toUpperCase(), categoria, precio,img_producto,status]
                 );
 
                 const idProducto = result.insertId;
@@ -501,7 +501,7 @@ const inventoryResolver = {
 
                 if (descripcion !== undefined) {
                     updates.push("descripcion = ?");
-                    values.push(descripcion);
+                    values.push(descripcion.toUpperCase());
                 }
 
                 if (categoria !== undefined) {

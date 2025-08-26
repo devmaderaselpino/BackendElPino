@@ -208,7 +208,7 @@ const clientResolver = {
                 const idCliente = await connection.execute(
                     `
                        INSERT INTO clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ?; 
-                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion]
+                    `,[nombre.toUpperCase(), aPaterno.toUpperCase(), aMaterno.toUpperCase(), municipio, colonia, calle.toUpperCase(), numero_ext, celular, distinguido, img_domicilio, descripcion.toUpperCase()]
                 );
 
                 return [ {
@@ -251,7 +251,7 @@ const clientResolver = {
                 const cliente = await connection.execute(
                     `
                        INSERT INTO clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ?; 
-                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion]
+                    `,[nombre.toUpperCase(), aPaterno.toUpperCase(), aMaterno.toUpperCase(), municipio, colonia, calle.toUpperCase(), numero_ext, celular, distinguido, img_domicilio, descripcion.toUpperCase()]
                 );
 
                 return "Cliente insertado";
@@ -279,7 +279,7 @@ const clientResolver = {
                 const cliente = await connection.execute(
                     `
                        UPDATE clientes SET nombre = ?, aPaterno = ?, aMaterno = ?, municipio = ?, colonia = ?, calle = ?, numero_ext = ?, celular = ?, distinguido = ?, img_domicilio = ?, descripcion = ? WHERE idCliente = ?; 
-                    `,[nombre, aPaterno, aMaterno, municipio, colonia, calle, numero_ext, celular, distinguido, img_domicilio, descripcion, idCliente]
+                    `,[nombre.toUpperCase(), aPaterno.toUpperCase(), aMaterno.toUpperCase(), municipio, colonia, calle.toUpperCase(), numero_ext, celular, distinguido, img_domicilio, descripcion.toUpperCase(), idCliente]
                 );
 
                 return "Cliente actualizado";

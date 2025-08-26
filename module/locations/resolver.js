@@ -280,7 +280,7 @@ const locationResolver = {
                 const municipio = await connection.execute(
                     `
                        INSERT INTO municipios SET nombre = ?; 
-                    `,[nombre]
+                    `,[nombre.toUpperCase()]
                 );
 
                 return "Municipio insertado";
@@ -307,7 +307,7 @@ const locationResolver = {
                 const colonia = await connection.execute(
                     `
                        INSERT INTO colonias SET idMunicipio = ?, nombre = ?, cp = ?; 
-                    `,[idMunicipio, nombre, cp]
+                    `,[idMunicipio, nombre.toUpperCase(), cp]
                 );
 
                 return "Colonia insertada";
@@ -334,7 +334,7 @@ const locationResolver = {
                 const municipio = await connection.execute(
                     `
                        UPDATE municipios SET nombre = ? WHERE idMunicipio = ?; 
-                    `,[nombre, idMunicipio]
+                    `,[nombre.toUpperCase(), idMunicipio]
                 );
 
                 return "Municipio actualizado";
@@ -361,7 +361,7 @@ const locationResolver = {
                 const colonia = await connection.execute(
                     `
                        UPDATE colonias SET nombre = ?, idMunicipio = ?, cp = ? WHERE idColonia = ?; 
-                    `, [nombre, idMunicipio, cp, idColonia]
+                    `, [nombre.toUpperCase(), idMunicipio, cp, idColonia]
                 );
 
                 return "Colonia actualizada";
