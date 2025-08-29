@@ -16,152 +16,151 @@ const routedResolver = {
                 });
             }
         },
-
         getClientesSinAsignar: async () => {
-                try {
-                    const [rows] = await connection.query(`
-                    SELECT 
-                        c.idCliente,
-                        CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno)    AS nombreCliente,
-                        CONCAT(' ', col.nombre, ' calle ', c.calle, ' num: ', c.numero_ext) AS direccion,
-                        m.nombre                                              AS municipio
-                    FROM clientes c
-                    JOIN municipios m ON c.municipio = m.idMunicipio
-                    JOIN colonias   col ON col.idColonia = c.colonia
-                    WHERE
-                        EXISTS (
+        try {
+            const [rows] = await connection.query(`
+            SELECT 
+                c.idCliente,
+                CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno)    AS nombreCliente,
+                CONCAT(' ', col.nombre, ' calle ', c.calle, ' num: ', c.numero_ext) AS direccion,
+                m.nombre                                              AS municipio
+            FROM clientes c
+            JOIN municipios m ON c.municipio = m.idMunicipio
+            JOIN colonias   col ON col.idColonia = c.colonia
+            WHERE
+                EXISTS (
+                SELECT 1
+                FROM ventas v
+                WHERE v.idCliente = c.idCliente
+                    AND v.status = 1
+                )
+                AND NOT EXISTS (
+                SELECT 1
+                FROM asignacion_rutas ar
+                WHERE ar.idCliente = c.idCliente
+                    AND ar.status = 1
+                )
+            ORDER BY c.idCliente
+            `);
+            return rows;
+        } catch (error) {
+            console.error(error);
+            throw new GraphQLError("Error al obtener clientes sin cobrador.", {
+            extensions: { code: "BAD_REQUEST", http: { status: 400 } },
+            });
+        }
+        },
+        getRutas: async (_, { idCobrador }) => {
+        try {
+            const [rows] = await connection.query(
+            `
+            SELECT 
+            r.idCobrador,
+            u.nombre AS nombreCobrador,
+            r.idRuta,
+            c.idCliente,
+            CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno) AS nombreCliente,
+            CONCAT('COLONIA: ', col.nombre, ' CALLE: ', c.calle, ' NUM: ', c.numero_ext) AS direccion,
+            m.nombre AS municipio,
+            c.celular,
+            c.distinguido
+                FROM (
+                    SELECT DISTINCT idCobrador, idRuta
+                    FROM asignacion_rutas
+                    WHERE idCobrador = ? AND status = 1
+                ) r
+                JOIN usuarios u
+                    ON u.idUsuario = r.idCobrador
+                LEFT JOIN asignacion_rutas ar
+                    ON ar.idCobrador = r.idCobrador
+                AND ar.idRuta     = r.idRuta
+                AND ar.idCliente IS NOT NULL
+                AND ar.status     = 1
+                LEFT JOIN clientes c
+                    ON c.idCliente = ar.idCliente
+                LEFT JOIN colonias col
+                    ON col.idColonia = c.colonia
+                LEFT JOIN municipios m
+                    ON m.idMunicipio = c.municipio
+                WHERE 
+                    c.idCliente IS NULL
+                    OR EXISTS (
                         SELECT 1
                         FROM ventas v
                         WHERE v.idCliente = c.idCliente
-                            AND v.status = 1
-                        )
-                        AND NOT EXISTS (
-                        SELECT 1
-                        FROM asignacion_rutas ar
-                        WHERE ar.idCliente = c.idCliente
-                            AND ar.status = 1
-                        )
-                    ORDER BY c.idCliente
-                    `);
-                    return rows;
-                } catch (error) {
-                    console.error(error);
-                    throw new GraphQLError("Error al obtener clientes sin cobrador.", {
-                    extensions: { code: "BAD_REQUEST", http: { status: 400 } },
-                    });
-                }
-                },
+                        AND v.status = 1
+                    )
+                ORDER BY r.idRuta, c.nombre, c.aPaterno, c.aMaterno;
 
 
-        getRutas: async (_, { idCobrador }) => {
-            try {
-                const [rows] = await connection.query(
-                `
-              SELECT 
-                r.idCobrador,
-                u.nombre AS nombreCobrador,
-                r.idRuta,
-                c.idCliente,
-                CONCAT(c.nombre, ' ', c.aPaterno, ' ', c.aMaterno) AS nombreCliente,
-                CONCAT('COLONIA: ', col.nombre, ' CALLE: ', c.calle, ' NUM: ', c.numero_ext) AS direccion,
-                m.nombre AS municipio,
-                c.celular,
-                c.distinguido
-                    FROM (
-                        SELECT DISTINCT idCobrador, idRuta
-                        FROM asignacion_rutas
-                        WHERE idCobrador = ? AND status = 1
-                    ) r
-                    JOIN usuarios u
-                        ON u.idUsuario = r.idCobrador
-                    LEFT JOIN asignacion_rutas ar
-                        ON ar.idCobrador = r.idCobrador
-                    AND ar.idRuta     = r.idRuta
-                    AND ar.idCliente IS NOT NULL
-                    AND ar.status     = 1
-                    LEFT JOIN clientes c
-                        ON c.idCliente = ar.idCliente
-                    LEFT JOIN colonias col
-                        ON col.idColonia = c.colonia
-                    LEFT JOIN municipios m
-                        ON m.idMunicipio = c.municipio
-                    WHERE 
-                        c.idCliente IS NULL
-                        OR EXISTS (
-                            SELECT 1
-                            FROM ventas v
-                            WHERE v.idCliente = c.idCliente
-                            AND v.status = 1
-                        )
-                    ORDER BY r.idRuta, c.nombre, c.aPaterno, c.aMaterno;
+            `,
+            [idCobrador]
+            );
 
+            if (rows.length === 0) return [];
 
-                `,
-                [idCobrador]
-                );
-
-                if (rows.length === 0) return [];
-
-             
-                const rutas = new Map();
-                for (const row of rows) {
-                if (!rutas.has(row.idRuta)) {
-                    rutas.set(row.idRuta, {
-                    idRuta: row.idRuta,
-                    idCobrador: row.idCobrador,
-                    name: `Ruta ${row.idRuta} de ${row.nombreCobrador}`,
-                    description: "Clientes asignados",
-                    color: "#3b82f6",
-                    clientes: [],
-                    });
-                }
-                if (row.idCliente) {
-                    rutas.get(row.idRuta).clientes.push({
-                    idCliente: row.idCliente,
-                    nombreCliente: row.nombreCliente,
-                    direccion: row.direccion,
-                    municipio: row.municipio,
-                    celular: row.celular,
-                    distinguido: row.distinguido,
-                    });
-                }
-                }
-
-                return Array.from(rutas.values());
-            } catch (error) {
-                console.error(error);
-                throw new GraphQLError("Error al obtener las rutas.", {
-                extensions: { code: "INTERNAL_SERVER_ERROR" },
+            
+            const rutas = new Map();
+            for (const row of rows) {
+            if (!rutas.has(row.idRuta)) {
+                rutas.set(row.idRuta, {
+                idRuta: row.idRuta,
+                idCobrador: row.idCobrador,
+                name: `Ruta ${row.idRuta} de ${row.nombreCobrador}`,
+                description: "Clientes asignados",
+                color: "#3b82f6",
+                clientes: [],
                 });
             }
-            },
-             getTotalesClientesAsignados: async () => {
-                    try {
-                        const [rows] = await connection.query(
-                        `
-                        SELECT idCobrador, COUNT(*) AS total_clientes
-                        FROM asignacion_rutas
-                        WHERE status = 1
-                            AND idCliente IS NOT NULL
-                        GROUP BY idCobrador
-                        ORDER BY idCobrador
-                        `
-                        );
-                       
-                        return rows.map(r => ({
-                        idCobrador: String(r.idCobrador),
-                        total_clientes: Number(r.total_clientes) || 0,
-                        }));
-                    } catch (err) {
-                        console.error("getTotalesClientesAsignados error:", err);
-                        throw new GraphQLError("Error al obtener totales por cobrador");
-                    }
-                    },
-        getClientesByCobrador: async (_, { nombre }, ctx) => {
+            if (row.idCliente) {
+                rutas.get(row.idRuta).clientes.push({
+                idCliente: row.idCliente,
+                nombreCliente: row.nombreCliente,
+                direccion: row.direccion,
+                municipio: row.municipio,
+                celular: row.celular,
+                distinguido: row.distinguido,
+                });
+            }
+            }
+
+            return Array.from(rutas.values());
+        } catch (error) {
+            console.error(error);
+            throw new GraphQLError("Error al obtener las rutas.", {
+            extensions: { code: "INTERNAL_SERVER_ERROR" },
+            });
+        }
+        },
+        getTotalesClientesAsignados: async () => {
+        try {
+            const [rows] = await connection.query(
+            `
+            SELECT idCobrador, COUNT(*) AS total_clientes
+            FROM asignacion_rutas
+            WHERE status = 1
+                AND idCliente IS NOT NULL
+            GROUP BY idCobrador
+            ORDER BY idCobrador
+            `
+            );
+            
+            return rows.map(r => ({
+            idCobrador: String(r.idCobrador),
+            total_clientes: Number(r.total_clientes) || 0,
+            }));
+        } catch (err) {
+            console.error("getTotalesClientesAsignados error:", err);
+            throw new GraphQLError("Error al obtener totales por cobrador");
+        }
+        },
+        getClientesByCobrador: async (_, { nombre, colonia }, ctx) => {
             try {
                 const condicionNombre = nombre
                 ? `AND CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) LIKE ?`
                 : "";
+
+                const condicionColonia = colonia !== 0 ? `AND c.colonia = ${colonia}` : ""
 
                 const query = `
                     SELECT 
@@ -177,15 +176,21 @@ const routedResolver = {
                             WHERE ap.idCliente = ar.idCliente
                             AND ap.pagado = 0
                             AND ap.status = 1
-                            AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes
+                            AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes,
+                        (SELECT COUNT(*)
+                            FROM abonos
+                            WHERE WEEK(fecha_reg, 1) = WEEK(NOW(), 1)
+                            AND YEAR(fecha_reg) = YEAR(NOW()) AND status = 1 and tipo = 1 and idVenta = v.idVenta
+                        ) AS num_abonos
                         FROM asignacion_rutas ar
                         INNER JOIN ventas v ON ar.idCliente = v.idCliente AND v.status = 1
                         INNER JOIN clientes c ON ar.idCliente = c.idCliente
                         INNER JOIN municipios m ON c.municipio = m.idMunicipio
                         INNER JOIN colonias col ON c.colonia = col.idColonia
                         WHERE ar.idCobrador = ? AND ar.status = 1
+                        ${condicionColonia}
                         ${condicionNombre}
-                        GROUP BY ar.idCliente ORDER BY abonos_atrasados DESC, num_pendientes DESC
+                        GROUP BY ar.idCliente ORDER BY ar.orden ASC
                 `;
 
                 const parametros = [ctx.usuario.idUsuario];
@@ -198,12 +203,39 @@ const routedResolver = {
                 console.log(error);
                 return [];
             }
-        }
+        },
+        getColoniasAsignadas: async (_, { }, ctx) => {
+            try {
 
+                const [colonias] = await connection.query(
+                    `
+                        SELECT DISTINCT c.colonia, CONCAT(col.nombre, " (", mun.nombre, ")") AS nombre
+                            FROM asignacion_rutas ar 
+                            INNER JOIN clientes c ON ar.idCliente = c.idCliente
+                            INNER JOIN colonias col ON c.colonia = col.idColonia
+                            INNER JOIN municipios mun ON col.idMunicipio = mun.idMunicipio
+                            WHERE ar.idCobrador = ? AND ar.status = 1 ORDER BY nombre ASC
+                    `, [ctx.usuario.idUsuario]
+                );
+                
+
+                return colonias;
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error obteniendo colonias.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
     },
 
     Mutation: {
-     asignarClienteARuta: async (_, { input }) => {
+        asignarClienteARuta: async (_, { input }) => {
         const { idCobrador, idRuta, idCliente } = input;
         const conn = connection;
 
@@ -219,7 +251,7 @@ const routedResolver = {
             });
             }
 
-           
+            
             const [dup] = await conn.query(
             `SELECT 1 FROM asignacion_rutas
                 WHERE idCobrador = ? AND idRuta = ? AND idCliente = ? AND status = 1
@@ -228,10 +260,10 @@ const routedResolver = {
             );
             if (dup.length > 0) return true;
 
-           
+            
             if (conn.beginTransaction) await conn.beginTransaction();
 
-           
+            
             const [upd] = await conn.query(
             `
             UPDATE asignacion_rutas
@@ -269,84 +301,108 @@ const routedResolver = {
             });
         }
         },
-       eliminarClienteDeRuta: async (_, { input }) => {
-            const { idCobrador, idRuta, idCliente } = input;
-            const conn = connection;
-            try {
-                
-                const [upd] = await conn.query(
+        eliminarClienteDeRuta: async (_, { input }) => {
+        const { idCobrador, idRuta, idCliente } = input;
+        const conn = connection;
+        try {
+            
+            const [upd] = await conn.query(
+            `
+            UPDATE asignacion_rutas
+            SET status = 0
+            WHERE idCobrador = ? AND idRuta = ? AND idCliente = ? AND status = 1
+            `,
+            [idCobrador, idRuta, idCliente]
+            );
+
+
+            const [activos] = await conn.query(
+            `
+            SELECT 1
+            FROM asignacion_rutas
+            WHERE idCobrador = ? AND idRuta = ? AND idCliente IS NOT NULL AND status = 1
+            LIMIT 1
+            `,
+            [idCobrador, idRuta]
+            );
+
+            
+            if (activos.length === 0) {
+            await conn.query(
                 `
                 UPDATE asignacion_rutas
                 SET status = 0
-                WHERE idCobrador = ? AND idRuta = ? AND idCliente = ? AND status = 1
-                `,
-                [idCobrador, idRuta, idCliente]
-                );
-
-            
-                const [activos] = await conn.query(
-                `
-                SELECT 1
-                FROM asignacion_rutas
-                WHERE idCobrador = ? AND idRuta = ? AND idCliente IS NOT NULL AND status = 1
-                LIMIT 1
+                WHERE idCobrador = ? AND idRuta = ? AND idCliente IS NULL
                 `,
                 [idCobrador, idRuta]
-                );
+            );
+            }
 
+            return upd.affectedRows > 0;
+        } catch (error) {
+            console.error(error);
+            throw new GraphQLError("Error al eliminar la asignación (lógica).", {
+            extensions: { code: "INTERNAL_SERVER_ERROR" },
+            });
+        }
+        },
+        crearRuta: async (_, { idCobrador }) => {
+        try {
+            const [maxRes] = await connection.query(
+            `SELECT COALESCE(MAX(idRuta), 0) AS maxRuta
+            FROM asignacion_rutas
+            WHERE idCobrador = ?`,
+            [idCobrador]
+            );
+            const nuevoIdRuta = (maxRes[0]?.maxRuta || 0) + 1;
+
+
+            const [ins] = await connection.query(
+            `INSERT INTO asignacion_rutas (idRuta, idCobrador, idCliente, status)
+            VALUES (?, ?, NULL, 1)`,
+            [nuevoIdRuta, idCobrador]
+            );
+
+            return {
+            success: ins.affectedRows > 0,
+            message: "Ruta creada exitosamente",
+            idRuta: nuevoIdRuta,
+            };
+        } catch (error) {
+            console.error("Error al crear la ruta:", error);
+            throw new GraphQLError("Error al crear la ruta.", {
+            extensions: { code: "INTERNAL_SERVER_ERROR" },
+            });
+        }
+        },
+        actualizarEnrutado: async (_, { input }, ctx ) => {
+            try {
+
+                const { ids } = input;
+
+                for(const item of ids){
                 
-                if (activos.length === 0) {
-                await conn.query(
-                    `
-                    UPDATE asignacion_rutas
-                    SET status = 0
-                    WHERE idCobrador = ? AND idRuta = ? AND idCliente IS NULL
-                    `,
-                    [idCobrador, idRuta]
-                );
+                    const [actualizarEnrutado] = await connection.execute(
+                        `UPDATE asignacion_rutas SET orden = ? WHERE idCliente = ? AND status = 1 AND idCobrador = ?; `,
+                        [item.orden, item.idCliente, ctx.usuario.idUsuario]
+                    );
+
                 }
 
-                return upd.affectedRows > 0;
+                return "Enrutado actualizado.";
             } catch (error) {
-                console.error(error);
-                throw new GraphQLError("Error al eliminar la asignación (lógica).", {
-                extensions: { code: "INTERNAL_SERVER_ERROR" },
+
+                throw new GraphQLError("Error actualizando enrutado.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
                 });
+                
             }
-            },
-     crearRuta: async (_, { idCobrador }) => {
-            try {
-                const [maxRes] = await connection.query(
-                `SELECT COALESCE(MAX(idRuta), 0) AS maxRuta
-                FROM asignacion_rutas
-                WHERE idCobrador = ?`,
-                [idCobrador]
-                );
-                const nuevoIdRuta = (maxRes[0]?.maxRuta || 0) + 1;
-
-      
-                const [ins] = await connection.query(
-                `INSERT INTO asignacion_rutas (idRuta, idCobrador, idCliente, status)
-                VALUES (?, ?, NULL, 1)`,
-                [nuevoIdRuta, idCobrador]
-                );
-
-                return {
-                success: ins.affectedRows > 0,
-                message: "Ruta creada exitosamente",
-                idRuta: nuevoIdRuta,
-                };
-            } catch (error) {
-                console.error("Error al crear la ruta:", error);
-                throw new GraphQLError("Error al crear la ruta.", {
-                extensions: { code: "INTERNAL_SERVER_ERROR" },
-                });
-            }
-            }
-
-
-
-
+        }
     },
 };
 
