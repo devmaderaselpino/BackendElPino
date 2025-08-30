@@ -178,19 +178,27 @@ const routedResolver = {
                             AND ap.status = 1
                             AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes,
                         (SELECT COUNT(*)
-                            FROM abonos
-                            WHERE WEEK(fecha_reg, 1) = WEEK(NOW(), 1)
-                            AND YEAR(fecha_reg) = YEAR(NOW()) AND status = 1 and tipo = 1 and idVenta = v.idVenta
-                        ) AS num_abonos
+                            FROM abonos a
+                            WHERE a.status = 1
+                                AND a.tipo = 1
+                                AND WEEK(a.fecha_reg, 1) = WEEK(CURDATE(), 1)
+                                AND YEAR(a.fecha_reg) = YEAR(CURDATE())
+                                AND a.idVenta IN (
+                                SELECT v2.idVenta
+                                    FROM ventas v2
+                                    WHERE v2.idCliente = ar.idCliente
+                                    AND v2.status = 1
+                                )
+                            ) AS num_abonos,
+                        MIN(ar.orden) AS orden
                         FROM asignacion_rutas ar
-                        INNER JOIN ventas v ON ar.idCliente = v.idCliente AND v.status = 1
                         INNER JOIN clientes c ON ar.idCliente = c.idCliente
                         INNER JOIN municipios m ON c.municipio = m.idMunicipio
                         INNER JOIN colonias col ON c.colonia = col.idColonia
                         WHERE ar.idCobrador = ? AND ar.status = 1
                         ${condicionColonia}
                         ${condicionNombre}
-                        GROUP BY ar.idCliente ORDER BY ar.orden ASC
+                        GROUP BY ar.idCliente ORDER BY orden ASC
                 `;
 
                 const parametros = [ctx.usuario.idUsuario];
