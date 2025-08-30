@@ -193,6 +193,7 @@ const routedResolver = {
                         MIN(ar.orden) AS orden
                         FROM asignacion_rutas ar
                         INNER JOIN clientes c ON ar.idCliente = c.idCliente
+                        INNER JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
                         INNER JOIN municipios m ON c.municipio = m.idMunicipio
                         INNER JOIN colonias col ON c.colonia = col.idColonia
                         WHERE ar.idCobrador = ? AND ar.status = 1
