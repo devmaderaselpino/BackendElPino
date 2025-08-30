@@ -48,7 +48,7 @@ const cobradorResolver = {
                                 THEN abono 
                                 ELSE 0 
                             END) AS semana_anterior,
-                            3500.00 AS meta_cobranza
+                            (SELECT cantidad FROM config_meta) AS meta_cobranza
                             FROM abonos
                             WHERE usuario_reg = ?
                             AND tipo = 1 AND status = 1;
@@ -142,8 +142,35 @@ const cobradorResolver = {
                     extensions: { code: "BAD_REQUEST", http: { status: 400 } }
                 });
             }
-        }
+        },
     },
+    Mutation: {
+        updateMeta: async(_,{cantidad}) => {
+            
+            try {
+                
+                const actualizar = await connection.execute(
+                    `
+                       UPDATE config_meta SET cantidad = ?; 
+                    `,[cantidad]
+                );
+
+                return "Meta actualizada.";
+                
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error actualizando meta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+    }
 };
 
 export default cobradorResolver;

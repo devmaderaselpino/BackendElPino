@@ -20,6 +20,10 @@ const cobradorSchema = `#graphql
         getAbonosRango(fechaInicial: String, fechaFinal: String): Float
         getAbonosRangoCobrador(idCobrador: Int!, fechaInicial: String!, fechaFinal: String!): Float!
     }
+
+    type Mutation {
+        updateMeta(cantidad: Float): String
+    }
     
 `
 export default cobradorSchema;

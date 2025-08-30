@@ -235,7 +235,7 @@ const paymentResolver = {
                     [idVenta]
                 );
 
-                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6941166060\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes - totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\n\n      GRACIAS POR SU PAGO!`
+                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes - totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\n\n      GRACIAS POR SU PAGO!`
                 
             } catch (error) {
                 console.log(error);
