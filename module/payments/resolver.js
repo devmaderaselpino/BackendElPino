@@ -2,6 +2,7 @@ import { format } from "@formkit/tempo";
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
 import formatPrice from "../../functions/FormatPrice.js";
+import { diffMonths } from "@formkit/tempo";
 
 const paymentResolver = {
     Query : {
@@ -122,7 +123,13 @@ const paymentResolver = {
                 const [payments] = await connection.query(
                     `   
                        	
-                    SELECT a.idVenta, a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d %H:%i:%s") as fecha_reg, a.saldo_anterior, a.saldo_nuevo, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente, ? AS cobrador
+                    SELECT a.idVenta, a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d %H:%i:%s") as fecha_reg, a.saldo_anterior, a.saldo_nuevo, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente, ? AS cobrador, a.interes_anterior, a.interes_nuevo, a.liquidar,
+                        (SELECT GROUP_CONCAT(CONCAT(productos_venta.cantidad, " X ", productos.descripcion) SEPARATOR ',') AS productos
+                            FROM ventas 
+                            INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
+                            INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
+                            WHERE ventas.idVenta = v.idVenta
+                        ) AS productos
                         FROM abonos a
                         INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.tipo <> 1
                         INNER JOIN clientes c ON v.idCliente = c.idCliente
@@ -152,11 +159,6 @@ const paymentResolver = {
         insertPayment: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
 
             try {
-
-                const abonoInsert = await connection.execute(
-                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1`,
-                    [idVenta, abono, saldo_anterior, saldo_nuevo, ctx.usuario.idUsuario]
-                )
 
                 const [pagos] = await connection.query(`
                     SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
@@ -211,6 +213,16 @@ const paymentResolver = {
                     }
                 }
 
+                const [[interes]] = await connection.query(`
+                    SELECT SUM(interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                const abonoInsert = await connection.execute(
+                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?`,
+                    [idVenta, abono, saldo_anterior, saldo_nuevo, ctx.usuario.idUsuario,(interes.interes + totalTicket), interes.interes]
+                )
+
                 if(liquidado === 1){
                     const [abonos_programados] = await connection.query( 
                         `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idVenta = ?;`,
@@ -230,12 +242,124 @@ const paymentResolver = {
                     )
                 }
 
-                const [[interes]] = await connection.query(`
-                    SELECT SUM(interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
-                    [idVenta]
+                const [infoVenta]  = await connection.query(
+                    `   
+                       SELECT tipo, fecha, total FROM ventas WHERE idVenta = ?;
+                    `, [idVenta]
                 );
 
-                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes - totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\n\n      GRACIAS POR SU PAGO!`
+                let diferencia = diffMonths(new Date(), infoVenta[0].fecha);
+
+                if(diferencia < 0) {
+                    diferencia = diferencia * -1;
+                }
+
+                diferencia = diferencia + 1;
+     
+                const [[pendiente]] = await connection.query(
+                    `   
+                       SELECT SUM(cantidad - abono) AS cantidad_pendiente, SUM(interes-abono_interes) AS interes_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1;
+                    `, [idVenta]
+                );
+                
+                let descuento = 0;
+                
+                let totalPendiente = pendiente.cantidad_pendiente;
+
+                if(infoVenta[0].tipo === 2){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.15;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 5: 
+                            descuento = infoVenta[0].total * 0.05;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                } else if(infoVenta[0].tipo === 3){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.18;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.16;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 5:
+                            descuento = infoVenta[0].total * 0.14;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 6:
+                            descuento = infoVenta[0].total * 0.12;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 7:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 8:
+                            descuento = infoVenta[0].total * 0.08;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 9:
+                            descuento = infoVenta[0].total * 0.06;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 10:
+                            descuento = infoVenta[0].total * 0.04;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 11:
+                            descuento = infoVenta[0].total * 0.02;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                }
+
+                const actualizar = await connection.execute(
+                    `UPDATE abonos SET liquidar = ? WHERE id = ?`,
+                    [Math.ceil(totalPendiente + pendiente.interes_pendiente), abonoInsert[0].insertId]
+                )
+
+                const [productos] = await connection.query(
+                    `   
+                        SELECT CONCAT(productos_venta.cantidad," X ", productos.descripcion) AS productos
+                            FROM ventas 
+                            INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
+                            INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
+                            WHERE ventas.idVenta = ?;
+                    `, [idVenta]
+                ); 
+
+                const productosString = productos.map(p => p.productos).join("\n");
+
+                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nProductos:\n${productosString}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes + totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\nPara liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}\n\n      GRACIAS POR SU PAGO!`
                 
             } catch (error) {
                 console.log(error);

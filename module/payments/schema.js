@@ -36,7 +36,11 @@ const paymentSchema = `#graphql
         nombre_cliente: String
         saldo_anterior: Float
         saldo_nuevo: Float
+        interes_anterior: Float
+        interes_nuevo: Float
+        liquidar: Float
         cobrador: String
+        productos: String
     }
 
     type Query {
