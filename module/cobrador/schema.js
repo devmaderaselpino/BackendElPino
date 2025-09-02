@@ -39,16 +39,16 @@ const cobradorResolver = {
                 const [cobranza] = await connection.query(
                     `
                        SELECT
-                            SUM(CASE 
-                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(?, 1) 
+                            IFNULL(SUM(CASE 
+                                WHEN YEARWEEK(fecha_reg, 0) = YEARWEEK(?, 0) 
                                 THEN abono 
                                 ELSE 0 
-                            END) AS semana_actual,
-                            SUM(CASE 
-                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(? - INTERVAL 1 WEEK, 1) 
+                            END),0) AS semana_actual,
+                            IFNULL(SUM(CASE 
+                                WHEN YEARWEEK(fecha_reg, 0) = YEARWEEK(? - INTERVAL 1 WEEK, 0) 
                                 THEN abono 
                                 ELSE 0 
-                            END) AS semana_anterior,
+                            END),0) AS semana_anterior,
                             (SELECT cantidad FROM config_meta) AS meta_cobranza
                             FROM abonos
                             WHERE usuario_reg = ?
