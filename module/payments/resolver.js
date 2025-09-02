@@ -3,6 +3,7 @@ import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
 import formatPrice from "../../functions/FormatPrice.js";
 import { diffMonths } from "@formkit/tempo";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const paymentResolver = {
     Query : {
@@ -14,8 +15,8 @@ const paymentResolver = {
                         SELECT IFNULL(SUM(abono),0) total FROM abonos
                             INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE()) AND YEAR(abonos.fecha_reg) = YEAR(CURDATE()) AND abonos.status = 1
-                    `, [tipo]
+                            WHERE MONTH(abonos.fecha_reg) = MONTH(?) AND YEAR(abonos.fecha_reg) = YEAR(?) AND abonos.status = 1
+                    `, [tipo, mazatlanHora(), mazatlanHora()]
                 );
 
                 const [lastPayments] = await connection.query(
@@ -23,10 +24,10 @@ const paymentResolver = {
                         SELECT IFNULL(SUM(abono),0) total FROM abonos
                             INNER JOIN ventas ON abonos.idVenta = ventas.idVenta
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(abonos.fecha_reg) = MONTH(CURDATE() - INTERVAL 1 MONTH)
-                            AND YEAR(abonos.fecha_reg) = YEAR(CURDATE() - INTERVAL 1 MONTH) AND abonos.status = 1
+                            WHERE MONTH(abonos.fecha_reg) = MONTH(? - INTERVAL 1 MONTH)
+                            AND YEAR(abonos.fecha_reg) = YEAR(? - INTERVAL 1 MONTH) AND abonos.status = 1
 
-                    `, [tipo]
+                    `, [tipo, mazatlanHora(), mazatlanHora()]
                 );
 
                 return [
@@ -158,6 +159,15 @@ const paymentResolver = {
     Mutation : {
         insertPayment: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
 
+            function padToNextLine(text, cols = 32) {
+                const len = text.length;
+                const resto = len % cols;
+
+                if (resto === 0) return text;
+
+                return text + " ".repeat(cols - resto);
+            }
+
             try {
 
                 const [pagos] = await connection.query(`
@@ -207,8 +217,8 @@ const paymentResolver = {
 
                     if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
                         await connection.execute(
-                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
-                            [item.idAbonoProgramado]
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                            [mazatlanHora(), item.idAbonoProgramado]
                         );
                     }
                 }
@@ -219,14 +229,14 @@ const paymentResolver = {
                 );
 
                 const abonoInsert = await connection.execute(
-                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = NOW(), usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?`,
-                    [idVenta, abono, saldo_anterior, saldo_nuevo, ctx.usuario.idUsuario,(interes.interes + totalTicket), interes.interes]
+                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = ?, usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?`,
+                    [idVenta, abono, saldo_anterior, saldo_nuevo, mazatlanHora(), ctx.usuario.idUsuario,(interes.interes + totalTicket), interes.interes]
                 )
 
                 if(liquidado === 1){
                     const [abonos_programados] = await connection.query( 
-                        `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idVenta = ?;`,
-                        [idVenta]
+                        `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idVenta = ? AND pagado = 0 AND status = 1;`,
+                        [mazatlanHora(), idVenta]
                     );
                 }
 
@@ -355,12 +365,41 @@ const paymentResolver = {
                             INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
                             WHERE ventas.idVenta = ?;
                     `, [idVenta]
-                ); 
+                );
 
-                const productosString = productos.map(p => p.productos).join("\n");
+                const [[cliente]] = await connection.query(
+                    `   
+                    SELECT  CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre
+                        FROM ventas v
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE v.idVenta = ? LIMIT 1;
+                    `, [idVenta]
+                );
 
-                return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Madererias y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${ctx.usuario.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nProductos:\n${productosString}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes + totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\nPara liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}\n\n      GRACIAS POR SU PAGO!`
+                const productosString = productos
+                    .map(p => padToNextLine(String(p.productos)))
+                    .join("\n"); 
+
+                const lineas = "\n--------------------------------";
+                const lineas2 = "--------------------------------";
                 
+                const fecha = `Fecha: ${mazatlanHora()}`;
+                const folio = `Folio: ${abonoInsert[0].insertId}`;
+                const cantidadAbono = `Cantidad abono: ${formatPrice(abono)}`;
+                const clientee = `Cliente: ${cliente.nombre}`;
+                const venta = `No. Venta: ${idVenta}`;
+                const cobrador = `Cobrador: ${ctx.usuario.nombre}`;
+
+                const saldoAnterior = `Saldo anterior: ${formatPrice(saldo_anterior)}`;
+                const interesAnterior = `Interes anterior: ${formatPrice(interes.interes + totalTicket)}`;
+                const saldoActual = `Saldo actual: ${formatPrice(saldo_nuevo)}`;
+                const interesActual = `Interes actual: ${formatPrice(interes.interes)}`;
+                const liquidar = `Para liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}`;
+
+                // return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Maderas y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${cliente.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nProductos:\n${productosString}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes + totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\nPara liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}\n\n      GRACIAS POR SU PAGO!`
+                
+                return `      RFC: IAIZ-760804-RW6      Allende #23, Centro, C.P 82800    El Rosario, Sinaloa, Mexico           Tel: 6942518833               Maderas y Ensambles                  "El Pino"${lineas}${padToNextLine("DATOS DEL ABONO")}${padToNextLine(fecha)}${padToNextLine(folio)}${padToNextLine(cantidadAbono)}${padToNextLine(clientee)}${padToNextLine(venta)}${padToNextLine(cobrador)}${lineas}${padToNextLine("PRODUCTOS")}${productosString}${lineas2}${padToNextLine("SALDOS")}${padToNextLine(saldoAnterior)}${padToNextLine(interesAnterior)}${padToNextLine(saldoActual)}${padToNextLine(interesActual)}${padToNextLine(liquidar)}\n\n${padToNextLine("      GRACIAS POR SU PAGO!")}`
+
             } catch (error) {
                 console.log(error);
                 
@@ -385,8 +424,8 @@ const paymentResolver = {
 
                 await connection.execute(
                     `
-                       INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
-                    `,[idAbono, datos.abono, ctx.usuario.idUsuario]
+                       INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = ?, usuario_reg = ?; 
+                    `,[idAbono, datos.abono, mazatlanHora(), ctx.usuario.idUsuario]
                 );
 
                 await connection.execute(
@@ -529,8 +568,8 @@ const paymentResolver = {
 
                     if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
                         await connection.execute(
-                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
-                            [item.idAbonoProgramado]
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                            [mazatlanHora(), item.idAbonoProgramado]
                         );
                     }
                 }

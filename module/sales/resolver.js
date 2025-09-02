@@ -1,6 +1,7 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
-import { addDay, weekEnd, weekStart, format, addMonth, diffMonths } from "@formkit/tempo"
+import { addDay, weekEnd, weekStart, format, addMonth, diffMonths } from "@formkit/tempo";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const salesResolver = {
     Query : {
@@ -13,18 +14,18 @@ const salesResolver = {
                     `   
                         SELECT IFNULL(SUM(total),0) AS total FROM ventas
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE()) AND YEAR(ventas.fecha) = YEAR(CURDATE()) AND ventas.status <> 2
-                    `, [tipo]
+                            WHERE MONTH(ventas.fecha) = MONTH(?) AND YEAR(ventas.fecha) = YEAR(?) AND ventas.status <> 2
+                    `, [tipo, mazatlanHora(), mazatlanHora()]
                 );
 
                 const [lastSales] = await connection.query(
                     `   	
                         SELECT IFNULL(SUM(total),0) AS total FROM ventas
                             INNER JOIN clientes ON ventas.idCliente = clientes.idCliente AND clientes.municipio = ?
-                            WHERE MONTH(ventas.fecha) = MONTH(CURDATE() - INTERVAL 1 MONTH)
-                            AND YEAR(ventas.fecha) = YEAR(CURDATE() - INTERVAL 1 MONTH) AND ventas.status <> 2
+                            WHERE MONTH(ventas.fecha) = MONTH(? - INTERVAL 1 MONTH)
+                            AND YEAR(ventas.fecha) = YEAR(? - INTERVAL 1 MONTH) AND ventas.status <> 2
 
-                    `, [tipo]
+                    `, [tipo, mazatlanHora(), mazatlanHora()]
                 );
 
                 return [
@@ -289,15 +290,15 @@ const salesResolver = {
                 const [[abono]] = await connection.query(
                     `   
                         SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
-	                        AND pagado = 0 AND status = 1 AND (MONTH(fecha_programada) = MONTH(CURDATE()) AND YEAR(fecha_programada) = YEAR(CURDATE()));
-                    `, [idVenta]
+	                        AND pagado = 0 AND status = 1 AND (MONTH(fecha_programada) = MONTH(?) AND YEAR(fecha_programada) = YEAR(?));
+                    `, [idVenta, mazatlanHora(), mazatlanHora()]
                 );
 
                 const [[abonoaAtrasado]] = await connection.query(
                     `   
                         SELECT IFNULL(SUM(cantidad - abono),0) AS cantidad_abono FROM abonos_programados WHERE idVenta = ? 
-	                        AND pagado = 0 AND status = 1 AND (fecha_programada < NOW());
-                    `, [idVenta]
+	                        AND pagado = 0 AND status = 1 AND (fecha_programada < ?);
+                    `, [idVenta, mazatlanHora()]
                 );
 
                 const [[nombre_cliente]] = await connection.query(
@@ -524,8 +525,8 @@ const salesResolver = {
 
                 const venta = await connection.execute(
                     `
-                       INSERT INTO ventas SET total = ?, usuario_reg = ?, idCliente = ?, fecha = NOW(), tipo = ?, status = ?; 
-                    `,[total, ctx.usuario.idUsuario, idCliente, tipo, status]
+                       INSERT INTO ventas SET total = ?, usuario_reg = ?, idCliente = ?, fecha = ?, tipo = ?, status = ?; 
+                    `,[total, ctx.usuario.idUsuario, idCliente, mazatlanHora(), tipo, status]
                 );
 
                 for(const producto of productos){
@@ -541,8 +542,8 @@ const salesResolver = {
                 if(abono > 0 && tipo !== 1){
                     const abonoI = await connection.execute(
                         `
-                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = ?, usuario_reg = ?, tipo = 2; 
-                        `,[venta[0].insertId, abono, total, total - abono, ctx.usuario.idUsuario]
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = ?, saldo_anterior = ?, saldo_nuevo = ?, usuario_reg = ?, tipo = 2; 
+                        `,[venta[0].insertId, abono, mazatlanHora(), total, total - abono, ctx.usuario.idUsuario]
                         
                     );
                 }
@@ -550,8 +551,8 @@ const salesResolver = {
                 if(tipo === 1){
                     const abonoI = await connection.execute(
                         `
-                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = NOW(), saldo_anterior = ?, saldo_nuevo = 0, usuario_reg = ?, tipo = 4; 
-                        `,[venta[0].insertId, total, total, ctx.usuario.idUsuario]
+                            INSERT INTO abonos SET idVenta = ?, abono = ?, fecha_reg = ?, saldo_anterior = ?, saldo_nuevo = 0, usuario_reg = ?, tipo = 4; 
+                        `,[venta[0].insertId, total, mazatlanHora(), total, ctx.usuario.idUsuario]
                         
                     );
                 }
@@ -646,8 +647,8 @@ const salesResolver = {
                         
                         const productoVenta = await connection.execute(
                             `
-                            INSERT INTO productos_cancelados SET idVenta = ?, idProducto = ?, cantidad = ?, precio = ?, fecha = NOW(), usuario_reg = ?; 
-                            `,[idVenta, producto.idProducto, producto.cantidad, producto.precio, ctx.usuario.idUsuario]
+                            INSERT INTO productos_cancelados SET idVenta = ?, idProducto = ?, cantidad = ?, precio = ?, fecha = ?, usuario_reg = ?; 
+                            `,[idVenta, producto.idProducto, producto.cantidad, producto.precio, mazatlanHora(), ctx.usuario.idUsuario]
                         );
                     }
                 }
@@ -694,8 +695,8 @@ const salesResolver = {
                     for (const item of abonosActivos){
                         await connection.execute(
                             `
-                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
-                            `,[item.id, item.abono, ctx.usuario.idUsuario]
+                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = ?, usuario_reg = ?; 
+                            `,[item.id, item.abono, mazatlanHora(), ctx.usuario.idUsuario]
                         );
                     }
 
@@ -712,8 +713,8 @@ const salesResolver = {
                     if(saldo > 0){
                         await connection.execute(
                             `
-                                INSERT INTO saldo_favor SET idCliente = ?, cantidad = ?, vencimiento = DATE_ADD(CURDATE(), INTERVAL 2 MONTH)
-                            `,[infoInicial.idCliente, saldo]
+                                INSERT INTO saldo_favor SET idCliente = ?, cantidad = ?, vencimiento = DATE_ADD(?, INTERVAL 2 MONTH)
+                            `,[infoInicial.idCliente, saldo, mazatlanHora()]
                             
                         )
                     }
@@ -727,8 +728,8 @@ const salesResolver = {
                     for (const item of abonosActivos){
                         await connection.execute(
                             `
-                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = NOW(), usuario_reg = ?; 
-                            `,[item.id, item.abono, ctx.usuario.idUsuario]
+                            INSERT INTO abonos_cancelados SET idAbono = ?, cantidad = ?, fecha = ?, usuario_reg = ?; 
+                            `,[item.id, item.abono, mazatlanHora(), ctx.usuario.idUsuario]
                         );
                     }
 
@@ -780,8 +781,8 @@ const salesResolver = {
 
                             if((abonoAportado + item.abono) === item.cantidad){
                                 await connection.execute(
-                                    `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = NOW() WHERE idAbonoProgramado = ?;`,
-                                    [abonoAportado, item.idAbonoProgramado]
+                                    `UPDATE abonos_programados SET abono = (abono + ?), pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                                    [abonoAportado, mazatlanHora(), item.idAbonoProgramado]
                                 )
                             }else{
                                 await connection.execute(

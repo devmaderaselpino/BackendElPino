@@ -1,5 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const routedResolver = {
     Query: {
@@ -171,18 +172,18 @@ const routedResolver = {
                             WHERE ap.idCliente = ar.idCliente
                             AND ap.pagado = 0
                             AND ap.status = 1
-                            AND ap.fecha_programada < CURDATE()) AS abonos_atrasados,
+                            AND ap.fecha_programada < ?) AS abonos_atrasados,
                         (SELECT COUNT(*) FROM abonos_programados ap
                             WHERE ap.idCliente = ar.idCliente
                             AND ap.pagado = 0
                             AND ap.status = 1
-                            AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes,
+                            AND ap.fecha_programada <= LAST_DAY(?) AND ap.fecha_programada >= ?) AS num_pendientes,
                         (SELECT COUNT(*)
                             FROM abonos a
                             WHERE a.status = 1
                                 AND a.tipo = 1
-                                AND WEEK(a.fecha_reg, 1) = WEEK(CURDATE(), 1)
-                                AND YEAR(a.fecha_reg) = YEAR(CURDATE())
+                                AND WEEK(a.fecha_reg, 1) = WEEK(?, 1)
+                                AND YEAR(a.fecha_reg) = YEAR(?)
                                 AND a.idVenta IN (
                                 SELECT v2.idVenta
                                     FROM ventas v2
@@ -202,7 +203,7 @@ const routedResolver = {
                         GROUP BY ar.idCliente ORDER BY orden ASC
                 `;
 
-                const parametros = [ctx.usuario.idUsuario];
+                const parametros = [mazatlanHora(),mazatlanHora(),mazatlanHora(),mazatlanHora(),mazatlanHora(),ctx.usuario.idUsuario];
                 if (nombre) parametros.push(`%${nombre}%`);
 
                 const [clientes] = await connection.query(query, parametros);

@@ -1,5 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const clientResolver = {
     Query : {
@@ -93,6 +94,7 @@ const clientResolver = {
                     countParams
                 );
 
+                params.push(mazatlanHora());
                 params.push(limit, skip);
 
                 const [items] = await connection.query(
@@ -102,7 +104,7 @@ const clientResolver = {
                             FROM clientes c
                             INNER JOIN municipios m ON c.municipio = m.idMunicipio
                             INNER JOIN colonias co ON c.colonia = co.idColonia
-                            LEFT JOIN saldo_favor sf ON c.idCliente = sf.idCliente AND sf.vencimiento >= CURDATE() AND sf.status = 1
+                            LEFT JOIN saldo_favor sf ON c.idCliente = sf.idCliente AND sf.vencimiento >= ? AND sf.status = 1
                             ${where}
                             GROUP BY c.idCliente
                             LIMIT ? OFFSET ?

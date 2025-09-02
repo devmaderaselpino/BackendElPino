@@ -1,5 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const cobradorResolver = {
     Query : {
@@ -39,12 +40,12 @@ const cobradorResolver = {
                     `
                        SELECT
                             SUM(CASE 
-                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(CURDATE(), 1) 
+                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(?, 1) 
                                 THEN abono 
                                 ELSE 0 
                             END) AS semana_actual,
                             SUM(CASE 
-                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(CURDATE() - INTERVAL 1 WEEK, 1) 
+                                WHEN YEARWEEK(fecha_reg, 1) = YEARWEEK(? - INTERVAL 1 WEEK, 1) 
                                 THEN abono 
                                 ELSE 0 
                             END) AS semana_anterior,
@@ -53,19 +54,19 @@ const cobradorResolver = {
                             WHERE usuario_reg = ?
                             AND tipo = 1 AND status = 1;
                     `,
-                    [ctx.usuario.idUsuario]
+                    [mazatlanHora(), mazatlanHora(), ctx.usuario.idUsuario]
                 );
 
                 const [cobranza_ofi]  = await connection.query(
                     `
                         SELECT 
                             SUM(CASE 
-                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(CURDATE(), 1) 
+                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(?, 1) 
                                 THEN a.abono 
                                 ELSE 0 
                                 END) AS semana_actual,
                             SUM(CASE 
-                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(CURDATE() - INTERVAL 1 WEEK, 1) 
+                                WHEN YEARWEEK(a.fecha_reg, 1) = YEARWEEK(? - INTERVAL 1 WEEK, 1) 
                                 THEN a.abono 
                                 ELSE 0 
                                 END) AS semana_anterior
@@ -74,7 +75,7 @@ const cobradorResolver = {
                             INNER JOIN abonos a ON v.idVenta = a.idVenta AND a.status = 1 AND a.usuario_reg <> ? AND a.tipo = 1
                             WHERE ar.idCobrador = ? AND ar.status = 1
                     `,
-                    [ctx.usuario.idUsuario, ctx.usuario.idUsuario]
+                    [mazatlanHora(), mazatlanHora(), ctx.usuario.idUsuario, ctx.usuario.idUsuario]
                 );
 
                 const result = {

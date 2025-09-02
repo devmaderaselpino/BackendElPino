@@ -1,5 +1,6 @@
 import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
+import mazatlanHora from "../../functions/MazatlanHora.js";
 
 const inventoryResolver = {
     Query : {
@@ -275,8 +276,8 @@ const inventoryResolver = {
                 
                 await connection.query(
                     `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
-                    VALUES (?, ?, 'escuinapa', ?, ?, ?, NOW())`,
-                    [idProducto, ctx.usuario.idUsuario, stockAnterior, nuevoStock, nota]
+                    VALUES (?, ?, 'escuinapa', ?, ?, ?, ?)`,
+                    [idProducto, ctx.usuario.idUsuario, stockAnterior, nuevoStock, nota, mazatlanHora()]
                 );
 
                 return {
@@ -327,8 +328,8 @@ const inventoryResolver = {
 
                 await connection.query(
                     `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
-                    VALUES (?, ?, 'rosario', ?, ?, ?, NOW())`,
-                    [idProducto, ctx.usuario.idUsuario, stockAnterior, nuevoStock, nota]
+                    VALUES (?, ?, 'rosario', ?, ?, ?, ?)`,
+                    [idProducto, ctx.usuario.idUsuario, stockAnterior, nuevoStock, nota, mazatlanHora()]
                 );
 
                 return {
