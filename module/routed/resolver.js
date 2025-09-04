@@ -182,7 +182,7 @@ const routedResolver = {
                             FROM abonos a
                             WHERE a.status = 1
                                 AND a.tipo = 1
-                                AND WEEK(a.fecha_reg, 1) = WEEK(?, 1)
+                                AND WEEK(a.fecha_reg, 0) = WEEK(?, 0)
                                 AND YEAR(a.fecha_reg) = YEAR(?)
                                 AND a.idVenta IN (
                                 SELECT v2.idVenta
