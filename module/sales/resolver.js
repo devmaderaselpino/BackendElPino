@@ -682,8 +682,8 @@ const salesResolver = {
 
                     await connection.execute(
                         `
-                            UPDATE ventas SET total = total - ?, status = 2 WHERE idVenta = ?; 
-                        `,[totalCancelado, idVenta]
+                            UPDATE ventas SET total = 0, status = 2 WHERE idVenta = ?; 
+                        `,[idVenta]
                     );
 
                     await connection.execute(
@@ -706,8 +706,8 @@ const salesResolver = {
 
                     await connection.execute(
                         `
-                            UPDATE ventas SET total = total - ?, status = 2 WHERE idVenta = ?; 
-                        `,[totalCancelado, idVenta]
+                            UPDATE ventas SET total = 0, status = 2 WHERE idVenta = ?; 
+                        `,[idVenta]
                     );
 
                     if(saldo > 0){
