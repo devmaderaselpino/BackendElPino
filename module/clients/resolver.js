@@ -54,62 +54,62 @@ const clientResolver = {
             }
         },
         getClientsPaginated: async (_,{input}) => {
-  
             const { idMunicipio, idColonia, skip, limit, searchName } = input;
 
-            let whereClauses = [];
+            const whereClauses = [];
+            const whereParams = [];
 
             if (idMunicipio !== 0) {
-                whereClauses.push(`c.municipio = ${idMunicipio}`);
+                whereClauses.push("c.municipio = ?");
+                whereParams.push(idMunicipio);
             }
 
             if (idColonia !== 0) {
-                whereClauses.push(`c.colonia = ${idColonia}`);
+                whereClauses.push("c.colonia = ?");
+                whereParams.push(idColonia);
             }
 
             if (searchName && searchName.trim() !== "") {
                 whereClauses.push(`CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) LIKE ?`);
+                whereParams.push(`%${searchName}%`);
             }
 
             const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
             try {
-                const params = [];
-                const countParams = [];
-
-                if (searchName && searchName.trim() !== "") {
-                    const likeSearch = `%${searchName}%`;
-                    params.push(likeSearch);
-                    countParams.push(likeSearch);
-                }
-
+                
                 const [[{ total }]] = await connection.query(
                     `
                         SELECT COUNT(*) as total
-                            FROM clientes c
-                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
-                            INNER JOIN colonias co ON c.colonia = co.idColonia
-                            ${where}
+                        FROM clientes c
+                        INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                        INNER JOIN colonias co ON c.colonia = co.idColonia
+                        ${where}
                     `,
-                    countParams
+                    whereParams
                 );
 
-                params.push(mazatlanHora());
-                params.push(limit, skip);
+                
+                const mainQueryParams = [
+                    mazatlanHora(),
+                    ...whereParams,
+                    limit,
+                    skip
+                ];
 
                 const [items] = await connection.query(
                     `
                         SELECT c.*, m.nombre AS municipio_n, co.nombre AS colonia_n,
                             IFNULL(SUM(sf.cantidad),0) AS saldo_favor
-                            FROM clientes c
-                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
-                            INNER JOIN colonias co ON c.colonia = co.idColonia
-                            LEFT JOIN saldo_favor sf ON c.idCliente = sf.idCliente AND sf.vencimiento >= ? AND sf.status = 1
-                            ${where}
-                            GROUP BY c.idCliente
-                            LIMIT ? OFFSET ?
+                        FROM clientes c
+                        INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                        INNER JOIN colonias co ON c.colonia = co.idColonia
+                        LEFT JOIN saldo_favor sf ON c.idCliente = sf.idCliente AND sf.vencimiento >= ? AND sf.status = 1
+                        ${where}
+                        GROUP BY c.idCliente
+                        LIMIT ? OFFSET ?
                     `,
-                    params
+                    mainQueryParams
                 );
 
                 return { total, items };
