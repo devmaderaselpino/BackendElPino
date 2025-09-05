@@ -148,6 +148,7 @@ const salesResolver = {
                             GROUP_CONCAT(p.descripcion SEPARATOR ', ') AS articulos,
                             CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
                             v.total,
+                            (SELECT IFNULL(SUM(pc.cantidad * pc.precio),0) FROM productos_cancelados pc WHERE pc.idVenta = v.idVenta) AS cantidad_cancelada,
                             CASE v.tipo
                                 WHEN 1 THEN 'contado'
                                 WHEN 2 THEN 'credito 6 meses'
@@ -169,6 +170,9 @@ const salesResolver = {
 
                     `, 
                 );
+
+                console.log(ventas);
+                
                 
                 return ventas;
             } catch (error) {

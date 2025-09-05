@@ -30,6 +30,7 @@ const salesSchema = `#graphql
         total: Float!
         tipo: String!
         status:String!
+        cantidad_cancelada: Float!
     }
 
     input SalesInput {
