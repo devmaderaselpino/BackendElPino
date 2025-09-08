@@ -170,6 +170,11 @@ const paymentResolver = {
 
             try {
 
+                const [[interes1]] = await connection.query(`
+                    SELECT SUM(interes - abono_interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
                 const [pagos] = await connection.query(`
                     SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
                     [idVenta]
@@ -192,6 +197,7 @@ const paymentResolver = {
                             [abonoParaInteres, item.idAbonoProgramado]
                         );
                         abonoRecibido -= abonoParaInteres;
+                        totalTicket += abonoParaInteres;
                         item.abono_interes += abonoParaInteres;
                     }
 
@@ -212,7 +218,8 @@ const paymentResolver = {
                     }
 
                     const totalAbonadoInteres = parseFloat(item.abono_interes);
-                    totalTicket = totalAbonadoInteres;
+                    console.log("Total abonado interes: ", totalAbonadoInteres);
+
                     const totalAbonadoCapital = parseFloat(item.abono);
 
                     if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
@@ -224,13 +231,13 @@ const paymentResolver = {
                 }
 
                 const [[interes]] = await connection.query(`
-                    SELECT SUM(interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    SELECT SUM(interes - abono_interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
                     [idVenta]
                 );
 
                 const abonoInsert = await connection.execute(
                     `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = ?, usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?`,
-                    [idVenta, abono, saldo_anterior, saldo_nuevo, mazatlanHora(), ctx.usuario.idUsuario,(interes.interes + totalTicket), interes.interes]
+                    [idVenta, abono, saldo_anterior, saldo_nuevo, mazatlanHora(), ctx.usuario.idUsuario,(interes1.interes), interes.interes]
                 )
 
                 if(liquidado === 1){
@@ -353,8 +360,8 @@ const paymentResolver = {
                 }
 
                 const actualizar = await connection.execute(
-                    `UPDATE abonos SET liquidar = ? WHERE id = ?`,
-                    [Math.ceil(totalPendiente + pendiente.interes_pendiente), abonoInsert[0].insertId]
+                    `UPDATE abonos SET liquidar = ?, saldo_nuevo = ? WHERE id = ?`,
+                    [Math.ceil(totalPendiente + pendiente.interes_pendiente), saldo_anterior - (abono - totalTicket), abonoInsert[0].insertId]
                 )
 
                 const [productos] = await connection.query(
@@ -391,9 +398,9 @@ const paymentResolver = {
                 const cobrador = `Cobrador: ${ctx.usuario.nombre}`;
 
                 const saldoAnterior = `Saldo anterior: ${formatPrice(saldo_anterior)}`;
-                const interesAnterior = `Interes anterior: ${formatPrice(interes.interes + totalTicket)}`;
-                const saldoActual = `Saldo actual: ${formatPrice(saldo_nuevo)}`;
-                const interesActual = `Interes actual: ${formatPrice(interes.interes)}`;
+                const interesAnterior = `Interes anterior: ${formatPrice(interes1.interes)}`;
+                const saldoActual = `Saldo actual: ${formatPrice(saldo_anterior - (abono - totalTicket))}`;
+                const interesActual = interes1.interes - totalTicket > 0 ? `Interes actual: ${formatPrice(interes1.interes - totalTicket)}` : "Interes actual: $0.00";
                 const liquidar = `Para liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}`;
 
                 // return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Maderas y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${cliente.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nProductos:\n${productosString}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes + totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\nPara liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}\n\n      GRACIAS POR SU PAGO!`
