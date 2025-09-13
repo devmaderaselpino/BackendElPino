@@ -20,6 +20,22 @@ const routedSchema = `#graphql
         num_abonos: Int
     }
 
+    type ClienteDescarga {
+        idCliente: Int
+        nombreCliente: String
+        direccion: String
+        municipio: String
+        colonia: String
+        celular: String
+        img_domicilio: String
+        descripcion: String
+        distinguido: Int
+        abonos_atrasados: Int
+        num_pendientes: Int
+        num_abonos: Int
+        orden: Int
+    }
+
     type Ruta {
         idRuta: Int
         idCobrador:Int   
@@ -77,6 +93,7 @@ const routedSchema = `#graphql
         getClientesByCobrador(nombre: String, colonia: Int): [Cliente]
         getTotalesClientesAsignados: [ClientesPorCobrador!]!
         getColoniasAsignadas: [ColoniaAsignada]
+        getClienteDescarga: [ClienteDescarga]
     }
 
     type Mutation {

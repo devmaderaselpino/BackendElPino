@@ -137,12 +137,7 @@ const routedResolver = {
         try {
             const [rows] = await connection.query(
             `
-            SELECT idCobrador, COUNT(*) AS total_clientes
-            FROM asignacion_rutas
-            WHERE status = 1
-                AND idCliente IS NOT NULL
-            GROUP BY idCobrador
-            ORDER BY idCobrador
+                SELECT ar.idCobrador, COUNT(ar.id) AS total_clientes FROM asignacion_rutas ar WHERE ar.status = 1 AND ar.idCliente IN (SELECT v.idCliente FROM ventas v WHERE v.status = 1) GROUP BY ar.idCobrador
             `
             );
             
@@ -233,6 +228,65 @@ const routedResolver = {
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error obteniendo colonias.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+        getClienteDescarga: async (_, { }, ctx) => {
+            try {
+
+                const [clientes] = await connection.query(
+                    `
+                        SELECT 
+                            c.idCliente, c.distinguido,
+                            CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombreCliente, 
+                            CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion,
+                            m.nombre AS municipio, col.nombre AS colonia, c.celular, c.img_domicilio, c.descripcion,
+                            (SELECT COUNT(*) FROM abonos_programados ap
+                                WHERE ap.idCliente = ar.idCliente
+                                AND ap.pagado = 0
+                                AND ap.status = 1
+                                AND ap.fecha_programada < CURDATE()) AS abonos_atrasados,
+                            (SELECT COUNT(*) FROM abonos_programados ap
+                                WHERE ap.idCliente = ar.idCliente
+                                AND ap.pagado = 0
+                                AND ap.status = 1
+                                AND ap.fecha_programada <= LAST_DAY(CURDATE()) AND ap.fecha_programada >= CURDATE()) AS num_pendientes,
+                            (SELECT COUNT(*)
+                                FROM abonos a
+                                WHERE a.status = 1
+                                AND a.tipo = 1
+                                AND WEEK(a.fecha_reg, 0) = WEEK(CURDATE(), 0)
+                                AND YEAR(a.fecha_reg) = YEAR(CURDATE())
+                                AND a.idVenta IN (
+                                SELECT v2.idVenta
+                                    FROM ventas v2
+                                    WHERE v2.idCliente = ar.idCliente
+                                    AND v2.status = 1
+                                )
+                                ) AS num_abonos,
+                            MIN(ar.orden) AS orden
+                            FROM asignacion_rutas ar
+                            INNER JOIN clientes c ON ar.idCliente = c.idCliente
+                            INNER JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
+                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
+                            INNER JOIN colonias col ON c.colonia = col.idColonia
+                            WHERE ar.idCobrador = ? AND ar.status = 1
+
+                            GROUP BY ar.idCliente ORDER BY orden ASC
+                    `, [ctx.usuario.idUsuario]
+                );
+                
+
+                return clientes;
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error obteniendo clientes.",{
                     extensions:{
                         code: "BAD_REQUEST",
                         http: {
