@@ -130,7 +130,8 @@ const paymentResolver = {
                             INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
                             INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
                             WHERE ventas.idVenta = v.idVenta
-                        ) AS productos
+                        ) AS productos,
+                        a.usuario_reg
                         FROM abonos a
                         INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.tipo <> 1
                         INNER JOIN clientes c ON v.idCliente = c.idCliente
@@ -154,7 +155,84 @@ const paymentResolver = {
                 });
                 
             }
-        }
+        },
+        getPaymentsByCobradorAPP: async (_,{}, ctx) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                       	
+                    SELECT a.idVenta, a.id, a.abono, DATE_FORMAT(a.fecha_reg, "%Y-%m-%d %H:%i:%s") as fecha_reg, a.saldo_anterior, a.saldo_nuevo, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente, ? AS cobrador, a.interes_anterior, a.interes_nuevo, a.liquidar,
+                        (SELECT GROUP_CONCAT(CONCAT(productos_venta.cantidad, " X ", productos.descripcion) SEPARATOR ',') AS productos
+                            FROM ventas 
+                            INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
+                            INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
+                            WHERE ventas.idVenta = v.idVenta
+                        ) AS productos,
+                        a.usuario_reg
+                        FROM abonos a
+                        INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.tipo <> 1
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE a.usuario_reg = ? AND a.tipo = 1 AND a.status = 1
+                    
+                    UNION 
+	
+                    SELECT a.idVenta, a.id, a.abono,DATE_FORMAT(a.fecha_reg, "%Y-%m-%d %H:%i:%s") AS fecha_reg, a.saldo_anterior, a.saldo_nuevo, CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre_cliente, "" AS cobrador, a.interes_anterior, a.interes_nuevo, a.liquidar, "" AS productos, a.usuario_reg
+                        FROM abonos a
+                        INNER JOIN ventas v ON a.idVenta = v.idVenta AND v.tipo <> 1
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE a.usuario_reg <> ? AND a.status = 1 AND v.idCliente IN (SELECT ar.idCliente FROM asignacion_rutas ar WHERE ar.idCobrador = ? AND ar.status = 1)
+                        AND a.fecha_reg BETWEEN 
+                            DATE_ADD(?, INTERVAL -(DAYOFWEEK(?)-1 + 7) DAY)
+                        AND DATE_ADD(?, INTERVAL (7 - DAYOFWEEK(?)) DAY); 
+
+
+                    `, [ctx.usuario.nombre, ctx.usuario.idUsuario, ctx.usuario.idUsuario, ctx.usuario.idUsuario, mazatlanHora(), mazatlanHora(), mazatlanHora(), mazatlanHora()]
+                );
+
+               return payments;
+
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener pagos.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
+        getSalesPaymentsApp: async (_,{}, ctx) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                        SELECT 
+                            ap.idAbonoProgramado AS id, ap.idVenta, ap.num_pago, ap.cantidad, ap.abono, ap.interes, ap.abono_interes, 
+                            IFNULL(ap.fecha_programada, "N/A") AS fecha_programada, IFNULL(ap.fecha_liquido, "N/A") AS fecha_liquido, ap.pagado 
+                            FROM abonos_programados ap 
+                            WHERE ap.status = 1 AND ap.idCliente IN (SELECT ar.idCliente FROM asignacion_rutas ar WHERE ar.idCobrador = ? AND ar.status = 1)
+                    `, [ctx.usuario.idUsuario]
+                );
+
+               return payments;
+
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al obtener pagos.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
     },
     Mutation : {
         insertPayment: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
@@ -361,7 +439,7 @@ const paymentResolver = {
 
                 const actualizar = await connection.execute(
                     `UPDATE abonos SET liquidar = ?, saldo_nuevo = ? WHERE id = ?`,
-                    [Math.ceil(totalPendiente + pendiente.interes_pendiente), saldo_anterior - (abono - totalTicket), abonoInsert[0].insertId]
+                    [liquidado === 1 ? 0.00 : Math.ceil(totalPendiente + pendiente.interes_pendiente), liquidado === 1 ? 0.00 : saldo_anterior - (abono - totalTicket), abonoInsert[0].insertId]
                 )
 
                 const [productos] = await connection.query(
@@ -399,12 +477,13 @@ const paymentResolver = {
 
                 const saldoAnterior = `Saldo anterior: ${formatPrice(saldo_anterior)}`;
                 const interesAnterior = `Interes anterior: ${formatPrice(interes1.interes)}`;
-                const saldoActual = `Saldo actual: ${formatPrice(saldo_anterior - (abono - totalTicket))}`;
+                const saldoNuevo = liquidado === 1 ? 0.00 : saldo_anterior - (abono - totalTicket)
+                const saldoActual = `Saldo actual: ${formatPrice(saldoNuevo)}`;
                 const interesActual = interes1.interes - totalTicket > 0 ? `Interes actual: ${formatPrice(interes1.interes - totalTicket)}` : "Interes actual: $0.00";
-                const liquidar = `Para liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}`;
 
-                // return `\n      RFC: IAIZ-760804-RW6\n Allende #23, Centro, C.P 82800\n  El Rosario, Sinaloa, Mexico\n       Tel: 6942518833\n     Maderas y Ensambles\n           "El Pino"\n--------------------------------\nDATOS DEL ABONO\nFecha: ${format(new Date(), "YYYY-MM-DD HH:mm:ss")}\nFolio: ${abonoInsert[0].insertId}\nCantidad abono: ${formatPrice(abono)}\n\nCliente: ${cliente.nombre}\nNo. Venta: ${idVenta}\nCobrador: ${ctx.usuario.nombre}\n--------------------------------\nProductos:\n${productosString}\n--------------------------------\nSALDOS\nSaldo anterior: ${formatPrice(saldo_anterior)}\nInteres anterior: ${formatPrice(interes.interes + totalTicket)}\nSaldo actual: ${formatPrice(saldo_nuevo)}\nInteres actual: ${formatPrice(interes.interes)}\nPara liquidar HOY: ${formatPrice(Math.ceil(totalPendiente + pendiente.interes_pendiente))}\n\n      GRACIAS POR SU PAGO!`
-                
+                const liquidada = liquidado === 1 ? 0.00 : Math.ceil(totalPendiente + pendiente.interes_pendiente);
+                const liquidar = `Para liquidar HOY: ${formatPrice(liquidada)}`;
+  
                 return `      RFC: IAIZ-760804-RW6      Allende #23, Centro, C.P 82800    El Rosario, Sinaloa, Mexico           Tel: 6942518833               Maderas y Ensambles                  "El Pino"${lineas}${padToNextLine("DATOS DEL ABONO")}${padToNextLine(fecha)}${padToNextLine(folio)}${padToNextLine(cantidadAbono)}${padToNextLine(clientee)}${padToNextLine(venta)}${padToNextLine(cobrador)}${lineas}${padToNextLine("PRODUCTOS")}${productosString}${lineas2}${padToNextLine("SALDOS")}${padToNextLine(saldoAnterior)}${padToNextLine(interesAnterior)}${padToNextLine(saldoActual)}${padToNextLine(interesActual)}${padToNextLine(liquidar)}\n\n${padToNextLine("      GRACIAS POR SU PAGO!")}`
 
             } catch (error) {

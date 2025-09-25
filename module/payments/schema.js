@@ -41,6 +41,20 @@ const paymentSchema = `#graphql
         liquidar: Float
         cobrador: String
         productos: String
+        usuario_reg: Int
+    }
+
+    type SalePayment {
+        id: Int
+        idVenta: Int
+        num_pago: Int
+        cantidad: Float
+        abono: Float
+        interes: Float
+        abono_interes: Float
+        fecha_programada: String
+        fecha_liquido: String 
+        pagado: Int
     }
 
     type Query {
@@ -48,6 +62,8 @@ const paymentSchema = `#graphql
         GetAbonos: [Abono]
         getPaymentsBySale(idVenta: Int): [TablaPago]
         getPaymentsByCobrador: [AbonoCobrador]
+        getPaymentsByCobradorAPP: [AbonoCobrador]
+        getSalesPaymentsApp: [SalePayment]
     }
 
     type Mutation {
