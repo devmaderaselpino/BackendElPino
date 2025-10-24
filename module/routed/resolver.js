@@ -276,44 +276,66 @@ const routedResolver = {
 
                 const [clientes] = await connection.query(
                     `
-                        SELECT 
-                            c.idCliente, c.distinguido,
-                            CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombreCliente, 
-                            CONCAT(m.nombre, ", ", col.nombre, ", ", c.calle, " #", c.numero_ext) AS direccion,
-                            m.nombre AS municipio, col.nombre AS colonia, c.celular, c.img_domicilio, c.descripcion,
-                            ar.idRuta, ar.nombre,
-                            (SELECT COUNT(*) FROM abonos_programados ap
+                        SELECT
+                            ar.idCliente,
+                            MAX(c.distinguido) AS distinguido,
+                            CONCAT(MAX(c.nombre), ' ', MAX(c.aPaterno), ' ', MAX(c.aMaterno)) AS nombreCliente,
+                            CONCAT(MAX(m.nombre), ', ', MAX(col.nombre), ', ', MAX(c.calle), ' #', MAX(c.numero_ext)) AS direccion,
+                            MAX(m.nombre)  AS municipio,
+                            MAX(col.nombre) AS colonia,
+                            MAX(c.celular) AS celular,
+                            MAX(c.img_domicilio) AS img_domicilio,
+                            MAX(c.descripcion) AS descripcion,
+
+                            MAX(ar.idRuta) AS idRuta,
+                            MAX(ar.nombre) AS nombreRuta,
+
+                            (SELECT COUNT(*)
+                                FROM abonos_programados ap
                                 WHERE ap.idCliente = ar.idCliente
-                                AND ap.pagado = 0
-                                AND ap.status = 1
-                                AND ap.fecha_programada < CURDATE()) AS abonos_atrasados,
-                            (SELECT COUNT(*) FROM abonos_programados ap
+                                    AND ap.pagado = 0
+                                    AND ap.status = 1
+                                    AND ap.fecha_programada < CURDATE()
+                            ) AS abonos_atrasados,
+
+                            (SELECT COUNT(*)
+                                FROM abonos_programados ap
                                 WHERE ap.idCliente = ar.idCliente
-                                AND ap.pagado = 0
-                                AND ap.status = 1
-                                AND ap.fecha_programada BETWEEN CURDATE() AND LAST_DAY(CURDATE()) ) AS num_pendientes,
+                                    AND ap.pagado = 0
+                                    AND ap.status = 1
+                                    AND ap.fecha_programada BETWEEN CURDATE() AND LAST_DAY(CURDATE())
+                            ) AS num_pendientes,
+
                             (SELECT COUNT(*)
                                 FROM abonos a
                                 WHERE a.status = 1
-                                AND a.tipo = 1
-                                AND WEEK(a.fecha_reg, 0) = WEEK(CURDATE(), 0)
-                                AND YEAR(a.fecha_reg) = YEAR(CURDATE())
-                                AND a.idVenta IN (
-                                SELECT v2.idVenta
-                                    FROM ventas v2
-                                    WHERE v2.idCliente = ar.idCliente
-                                    AND v2.status = 1
-                                )
-                                ) AS num_abonos,
-                            MIN(ar.orden) AS orden
-                            FROM asignacion_rutas ar
-                            INNER JOIN clientes c ON ar.idCliente = c.idCliente
-                            INNER JOIN ventas v ON v.idCliente = c.idCliente AND v.status = 1
-                            INNER JOIN municipios m ON c.municipio = m.idMunicipio
-                            INNER JOIN colonias col ON c.colonia = col.idColonia
-                            WHERE ar.idCobrador = ? AND ar.status = 1
+                                    AND a.tipo   = 1
+                                    AND WEEK(a.fecha_reg, 0) = WEEK(CURDATE(), 0)
+                                    AND YEAR(a.fecha_reg)    = YEAR(CURDATE())
+                                    AND a.idVenta IN (
+                                    SELECT v2.idVenta
+                                        FROM ventas v2
+                                        WHERE v2.idCliente = ar.idCliente
+                                            AND v2.status = 1
+                                    )
+                            ) AS num_abonos,
 
-                            GROUP BY ar.idCliente ORDER BY orden ASC
+                            MIN(ar.orden) AS orden
+
+                            FROM asignacion_rutas ar
+                            JOIN clientes   c   ON c.idCliente   = ar.idCliente
+                            JOIN municipios m   ON m.idMunicipio = c.municipio
+                            JOIN colonias   col ON col.idColonia = c.colonia
+                            WHERE ar.idCobrador = ?
+                            AND ar.status = 1
+                            AND EXISTS (
+                                SELECT 1
+                                FROM ventas v
+                                WHERE v.idCliente = ar.idCliente
+                                AND v.status = 1
+                            )
+                            GROUP BY ar.idCliente
+                            ORDER BY orden ASC;
                     `, [ctx.usuario.idUsuario]
                 );
 
