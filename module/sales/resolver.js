@@ -145,7 +145,9 @@ const salesResolver = {
                 const [ventas] = await connection.query(
                     `   SELECT 
                             DATE_FORMAT(v.fecha, '%Y-%m-%d') AS fecha,
+                            v.idVenta AS numVenta,
                             GROUP_CONCAT(p.descripcion SEPARATOR ', ') AS articulos,
+                            v.idcliente as idcliente,
                             CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
                             v.total,
                             (SELECT IFNULL(SUM(pc.cantidad * pc.precio),0) FROM productos_cancelados pc WHERE pc.idVenta = v.idVenta) AS cantidad_cancelada,
@@ -474,7 +476,74 @@ const salesResolver = {
                 });
                 
             }
-        }
+        },
+        getVentasByCobrador: async (_,{}, ctx) => {
+            try {
+                const [ventas] = await connection.query(
+                    `   SELECT v.idVenta, v.total, DATE_FORMAT(v.fecha, "%Y-%m-%d %H:%i:%s") AS fecha, v.idCliente, v.tipo
+                            FROM ventas v
+                            WHERE v.idCliente IN (SELECT ar.idCliente FROM asignacion_rutas ar WHERE ar.idCobrador = ?) AND v.status = 1
+
+                    `, [ctx.usuario.idUsuario]
+                );
+
+                return ventas;
+            } catch (error) {
+                throw new GraphQLError("Error al obtener el historial ventas.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+        getDetallesVentaByCobrador: async (_,{}, ctx) => {
+            try {
+                const [detalle] = await connection.query(
+                    `   SELECT pv.id, pv.idVenta, pv.cantidad, p.descripcion, pv.precio, p.img_producto
+                            FROM productos_venta pv
+                            INNER JOIN productos p ON pv.idProducto = p.idProducto
+                            INNER JOIN ventas v ON pv.idVenta = v.idVenta AND v.status = 1
+                            WHERE v.idCliente IN (SELECT idCliente FROM asignacion_rutas WHERE idCobrador = ? AND STATUS = 1)
+
+                    `, [ctx.usuario.idUsuario]
+                );
+
+                return detalle;
+            } catch (error) {
+                throw new GraphQLError("Error al obtener el detalle de ventas.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
+        getEngancheByVenta: async (_, { idVenta }) => {
+
+            const [[info]] = await connection.query(
+                `SELECT IFNULL(SUM(a.abono),0) AS enganche,
+                    (SELECT CONCAT_WS(" ", c.nombre, c.aPaterno, c.aMaterno)
+                        FROM clientes c
+                        INNER JOIN ventas v ON c.idCliente = v.idCliente
+                        WHERE v.idVenta = ?
+                    ) AS nombre,
+                    (SELECT c.celular
+                        FROM clientes c
+                        INNER JOIN ventas v ON c.idCliente = v.idCliente
+                        WHERE v.idVenta = ?
+                    ) AS celular
+                    FROM abonos a
+                    WHERE a.idVenta = ? AND a.tipo = 2`,
+                [idVenta, idVenta, idVenta]
+            );
+
+            return info;
+        },
     },
     Sale: {
         getProducts: async (parent) => {
@@ -563,6 +632,13 @@ const salesResolver = {
 
                 if(municipio === 1){
                     for(const producto of productos){
+
+                        const [stockResult] = await connection.query(
+                            `SELECT stock FROM inventario_rosario WHERE idProducto = ?`,
+                            [producto.idProducto]
+                        );
+
+                        const stockAnterior = stockResult[0].stock;
                     
                         const inventariosVenta = await connection.execute(
                             `
@@ -570,9 +646,22 @@ const salesResolver = {
                             `,[producto.cantidad, producto.idProducto]
                         
                         );
+
+                        await connection.query(
+                            `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
+                            VALUES (?, ?, 'rosario', ?, ?, ?, ?)`,
+                            [producto.idProducto, ctx.usuario.idUsuario, stockAnterior, stockAnterior - producto.cantidad, "Venta en rosario", mazatlanHora()]
+                        );
                     }
                 }else if(municipio === 2){
                     for(const producto of productos){
+
+                        const [stockResult] = await connection.query(
+                            `SELECT stock FROM inventario_escuinapa WHERE idProducto = ?`,
+                            [producto.idProducto]
+                        );
+
+                        const stockAnterior = stockResult[0].stock;
                     
                         const inventariosVenta = await connection.execute(
                             `
@@ -580,19 +669,33 @@ const salesResolver = {
                             `,[producto.cantidad, producto.idProducto]
                         
                         );
+
+                        await connection.query(
+                            `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
+                            VALUES (?, ?, 'escuinapa', ?, ?, ?, ?)`,
+                            [producto.idProducto, ctx.usuario.idUsuario, stockAnterior, stockAnterior - producto.cantidad, "Venta en escuinapa", mazatlanHora()]
+                        );
                     }
                 }
 
                 let fecha_programada = format(weekStart(addDay(new Date(), 7)), "YYYY-MM-DD", "en");
+
+                const pagoRedondeado = Math.ceil((total - abono) / plazo);
+
+                const totalRedondeado = pagoRedondeado * plazo;
+
+                const diferencia = totalRedondeado - (total - abono);
+
+                const ultimoPago = pagoRedondeado - diferencia;
             
                 if(tipo !== 1){
-                    for( let index = 0; index < plazo; index++ ){
+                    for( let index = 1; index <= plazo; index++ ){
                         fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
     
                         const abonoProgramados = await connection.execute(
                             `
                                 INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                            `,[venta[0].insertId, idCliente, index + 1, Math.ceil((total - abono) / plazo), fecha_programada]
+                            `,[venta[0].insertId, idCliente, index, index === plazo ? ultimoPago : pagoRedondeado, fecha_programada]
                             
                         );
                         
@@ -605,7 +708,7 @@ const salesResolver = {
                     `,[idCliente]
                 );
 
-                return "Venta realizada."
+                return venta[0].insertId;
                 
             } catch (error) {
                 console.log(error);

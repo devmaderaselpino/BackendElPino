@@ -25,6 +25,8 @@ const salesSchema = `#graphql
 
     type Venta{
         fecha: String!
+        numVenta: Int
+        idcliente: Int
         articulos: String!
         cliente: String!
         total: Float!
@@ -64,6 +66,29 @@ const salesSchema = `#graphql
         abonos_total: Float
     }
 
+    type VentaDescarga {
+        idVenta: Int
+        fecha: String
+        idCliente: String
+        total: Float
+        tipo: Int
+    }
+
+    type DetalleVenta {
+        id: Int
+        idVenta: Int
+        cantidad: Int
+        descripcion: String
+        img_producto: String
+        precio: Float
+    }
+
+    type InfoEnganche {
+        enganche: Float
+        nombre: String
+        celular: String
+    }
+
     input ProductSale {
         idProducto: Int
         cantidad: Int
@@ -100,14 +125,17 @@ const salesSchema = `#graphql
         getLastSaleByClient(idCliente: Int) : String
         getSalesByClient(input: SalesInput): [Sale]
         getSaleByClient(idVenta: Int): Sale
+        getEngancheByVenta(idVenta: Int) : InfoEnganche
         getClientStats(idCliente: Int): ClientStats
         GetVentas: [Venta]
         getTotalsBySale(idVenta: Int): SaleTotals
         getPorcentajePagado(idVenta: Int): InfoPorcentaje
+        getVentasByCobrador: [VentaDescarga]
+        getDetallesVentaByCobrador: [DetalleVenta]
     }
     
     type Mutation {
-        insertSale(input: NewSale) : String
+        insertSale(input: NewSale) : Int
         editSale(input: EditSale) : String
     }
     

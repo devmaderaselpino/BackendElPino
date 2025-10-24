@@ -2,6 +2,15 @@ import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
 import mazatlanHora from "../../functions/MazatlanHora.js";
 
+const mapMunicipio = (id) => {
+  if (id === 1) return { table: "inventario_rosario", ubic: "rosario" };
+  if (id === 2) return { table: "inventario_escuinapa", ubic: "escuinapa" };
+  return null;
+};
+
+const buildNota = (fromUbic, toUbic) =>
+  `transferencia de ${fromUbic.toUpperCase()} a ${toUbic.toUpperCase()}`;
+
 const inventoryResolver = {
     Query : {
         getPendingInventory: async (_,{tipo}) => {
@@ -230,11 +239,82 @@ const inventoryResolver = {
                     },
                 });
             }
-        }
+        },
+        getMunicipiosActivos: async () => {
+            try {
+                const [rows] = await connection.query(
+                `
+                    SELECT idMunicipio, nombre
+                    FROM municipios
+                    WHERE status = 1
+                    ORDER BY nombre
+                `
+                );
 
+            
+                return rows.map(r => ({
+                idMunicipio: Number(r.idMunicipio),
+                nombre: r.nombre,
+                }));
+            } catch (error) {
+                console.error("Error al obtener municipios activos:", error);
+                throw new GraphQLError("Error al obtener municipios activos.", {
+                extensions: {
+                    code: "BAD_REQUEST",
+                    http: { status: 400 },
+                },
+                });
+            }
+        },
+        getProductosPorMunicipio: async (_,{ idMunicipio }) => {
+            try {
+                
+                if (idMunicipio !== 1 && idMunicipio !== 2) {
+                    throw new GraphQLError("idMunicipio inválido: usa 1 (Rosario) o 2 (Escuinapa).", {
+                        extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+                    });
+                }
 
+                const [rows] = await connection.query(
+                    `
+                    SELECT  
+                        p.idProducto,
+                        p.descripcion AS nombre,
+                        p.precio,
+                        p.img_producto,
+                        c.descripcion AS categoria,
+                        CASE WHEN ? = 1 THEN ir.stock    ELSE ie.stock    END AS stock,
+                        CASE WHEN ? = 1 THEN ir.min_stock ELSE ie.min_stock END AS min_stock
+                    FROM productos p
+                    LEFT JOIN categorias c          ON c.idCategoria = p.categoria
+                    LEFT JOIN inventario_rosario ir ON ir.idProducto = p.idProducto
+                    LEFT JOIN inventario_escuinapa ie ON ie.idProducto = p.idProducto
+                    WHERE p.status = 1
+                    AND (
+                            (? = 1 AND ir.stock > 0)
+                        OR (? = 2 AND ie.stock > 0)
+                    )
+                    ORDER BY p.descripcion
+                    `,
+                    [idMunicipio, idMunicipio, idMunicipio, idMunicipio]
+                );
 
-
+                return rows.map(r => ({
+                    idProducto: Number(r.idProducto),
+                    nombre: r.nombre,
+                    precio: Number(r.precio),
+                    img_producto: r.img_producto ?? null,
+                    categoria: r.categoria ?? null,
+                    stock: r.stock !== null ? Number(r.stock) : 0,
+                    min_stock: r.min_stock !== null ? Number(r.min_stock) : 0,
+                }));
+            } catch (error) {
+                console.error("Error getProductosPorMunicipio:", error);
+                throw new GraphQLError("Error al obtener productos por municipio.", {
+                    extensions: { code: "BAD_REQUEST", http: { status: 400 } },
+                });
+            }
+        },
 
     },
 
@@ -566,7 +646,144 @@ const inventoryResolver = {
                     extensions: { code: "INTERNAL_SERVER_ERROR" },
                 });
             }
-        }
+        },
+        transferirProductos: async (_, { fromMunicipio, toMunicipio, items, nota }, ctx) => {
+               
+            if (fromMunicipio === toMunicipio) {
+                throw new GraphQLError("El origen y destino no pueden ser iguales.", {
+                extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+                });
+            }
+            const fromInfo = mapMunicipio(fromMunicipio);
+            const toInfo = mapMunicipio(toMunicipio);
+            if (!fromInfo || !toInfo) {
+                throw new GraphQLError("idMunicipio inválido: usa 1 (Rosario) o 2 (Escuinapa).", {
+                extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+                });
+            }
+            if (!Array.isArray(items) || items.length === 0) {
+                throw new GraphQLError("Debes enviar al menos un artículo a transferir.", {
+                extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+                });
+            }
+
+            let conn;
+            try {
+                conn = await connection.getConnection();
+                await conn.beginTransaction();
+
+                const notaFinal = nota?.trim() || buildNota(fromInfo.ubic, toInfo.ubic);
+                const idUsuario = ctx?.usuario?.idUsuario ?? null; 
+
+                const results = [];
+
+                
+                for (const { idProducto, cantidad } of items) {
+                if (!Number.isInteger(idProducto) || !Number.isInteger(cantidad) || cantidad <= 0) {
+                    throw new GraphQLError(
+                    `Item inválido: idProducto=${idProducto}, cantidad=${cantidad}`,
+                    { extensions: { code: "BAD_USER_INPUT", http: { status: 400 } } }
+                    );
+                }
+
+                const [[fromRow]] = await conn.query(
+                    `SELECT stock FROM ${fromInfo.table} WHERE idProducto = ? FOR UPDATE`,
+                    [idProducto]
+                );
+                const [[toRow]] = await conn.query(
+                    `SELECT stock FROM ${toInfo.table} WHERE idProducto = ? FOR UPDATE`,
+                    [idProducto]
+                );
+
+                if (!fromRow) {
+                    throw new GraphQLError(
+                    `Producto ${idProducto} no existe en inventario de ${fromInfo.ubic}.`,
+                    { extensions: { code: "BAD_REQUEST", http: { status: 400 } } }
+                    );
+                }
+                if (!toRow) {
+                    
+                    throw new GraphQLError(
+                    `Producto ${idProducto} no existe en inventario de ${toInfo.ubic}.`,
+                    { extensions: { code: "BAD_REQUEST", http: { status: 400 } } }
+                    );
+                }
+
+                const fromStockAnterior = Number(fromRow.stock) || 0;
+                const toStockAnterior = Number(toRow.stock) || 0;
+
+                if (fromStockAnterior < cantidad) {
+                    throw new GraphQLError(
+                    `Stock insuficiente para idProducto=${idProducto} en ${fromInfo.ubic}. Disponible: ${fromStockAnterior}, requerido: ${cantidad}.`,
+                    { extensions: { code: "BAD_REQUEST", http: { status: 400 } } }
+                    );
+                }
+
+                const fromNuevoStock = fromStockAnterior - cantidad;
+                const toNuevoStock = toStockAnterior + cantidad;
+
+                
+                const [updFrom] = await conn.query(
+                    `UPDATE ${fromInfo.table} SET stock = ? WHERE idProducto = ?`,
+                    [fromNuevoStock, idProducto]
+                );
+                if (updFrom.affectedRows === 0) {
+                    throw new GraphQLError(
+                    `No se pudo actualizar stock en ${fromInfo.ubic} para idProducto=${idProducto}.`,
+                    { extensions: { code: "BAD_REQUEST", http: { status: 400 } } }
+                    );
+                }
+
+                const [updTo] = await conn.query(
+                    `UPDATE ${toInfo.table} SET stock = ? WHERE idProducto = ?`,
+                    [toNuevoStock, idProducto]
+                );
+                if (updTo.affectedRows === 0) {
+                    throw new GraphQLError(
+                    `No se pudo actualizar stock en ${toInfo.ubic} para idProducto=${idProducto}.`,
+                    { extensions: { code: "BAD_REQUEST", http: { status: 400 } } }
+                    );
+                }
+
+                
+                await conn.query(
+                    `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+                    [idProducto, idUsuario, fromInfo.ubic, fromStockAnterior, fromNuevoStock, notaFinal]
+                );
+
+                await conn.query(
+                    `INSERT INTO ajustes_inventario (idProducto, idUsuario, ubicacion, stock, nuevoStock, nota, fecha)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+                    [idProducto, idUsuario, toInfo.ubic, toStockAnterior, toNuevoStock, notaFinal]
+                );
+
+                results.push({
+                    idProducto,
+                    fromStockAnterior,
+                    fromNuevoStock,
+                    toStockAnterior,
+                    toNuevoStock,
+                });
+                }
+
+                await conn.commit();
+
+                return {
+                success: true,
+                message: `Transferencia completada de ${fromInfo.ubic.toUpperCase()} a ${toInfo.ubic.toUpperCase()}.`,
+                items: results,
+                };
+            } catch (error) {
+                if (conn) await conn.rollback();
+                console.error("Error en transferirProductos:", error);
+                throw new GraphQLError("Error al transferir productos.", {
+                extensions: { code: "BAD_REQUEST", http: { status: 400 } },
+                });
+            } finally {
+                if (conn) conn.release();
+            }
+        },
     }
     
 };

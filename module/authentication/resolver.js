@@ -16,9 +16,10 @@ const authenticationResolver = {
     },
     Mutation : {
         loginUser: async(_,{input}) => {
+            
             try {
                 const [user] = await connection.query(
-                    `   SELECT idUsuario, CONCAT(nombre, " ", aPaterno, " ", aMaterno) AS nombre, usuario, password, tipo FROM usuarios WHERE usuario = ? AND password = ? AND (tipo = 2 OR tipo = 1)
+                    `SELECT idUsuario, CONCAT(nombre, " ", aPaterno, " ", aMaterno) AS nombre, usuario, password, tipo FROM usuarios WHERE usuario = ? AND password = ? AND (tipo = 2 OR tipo = 1)
                     `,[input.usuario, input.password]
                 );
 

@@ -64,6 +64,7 @@ const paymentResolver = {
                     SELECT 
                         DATE_FORMAT(a.fecha_reg, '%Y-%m-%d') AS fecha,
                         CONCAT(c.nombre, ' ', c.apaterno, ' ', c.amaterno) AS cliente,
+                        a.id AS numAbono,
                         a.abono AS abono, a.id, a.tipo,
                         CASE a.tipo
                         WHEN 1 THEN 'Abono'
@@ -223,6 +224,45 @@ const paymentResolver = {
             } catch (error) {
                 console.log(error);
                 throw new GraphQLError("Error al obtener pagos.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+                
+            }
+        },
+        getTicketInfo: async (_,{idAbono}) => {
+            try {
+                
+                const [payments] = await connection.query(
+                    `   
+                    SELECT a.id, a.abono, a.idVenta, DATE_FORMAT(a.fecha_reg, '%d/%m/%Y %H:%i:%s') AS fecha_reg,
+                        CONCAT_WS(" ", c.nombre, c.aPaterno, c.aMaterno) AS cliente, c.celular,
+                        CONCAT_WS(" ", u.nombre, u.aPaterno, u.aMaterno) AS usuario_reg,
+                        a.saldo_anterior, a.saldo_nuevo, a.interes_nuevo, a.interes_anterior, a.liquidar,
+                        (SELECT GROUP_CONCAT(CONCAT(productos_venta.cantidad, " X ", productos.descripcion) SEPARATOR ',')
+                            FROM ventas 
+                            INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
+                            INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
+                            WHERE ventas.idVenta = v.idVenta
+                        ) AS productos
+                        FROM abonos a 
+                        INNER JOIN usuarios u ON a.usuario_reg = u.idUsuario
+                        INNER JOIN ventas v ON a.idVenta = v.idVenta
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE a.id = ?
+
+                    `, [idAbono]
+                );
+
+               return payments[0];
+
+            } catch (error) {
+                console.log(error);
+                throw new GraphQLError("Error al info del pago.",{
                     extensions:{
                         code: "BAD_REQUEST",
                         http: {
@@ -499,6 +539,276 @@ const paymentResolver = {
                 });
             }
         },
+        insertPaymentWithDigital: async(_,{ abono, idVenta, saldo_anterior, saldo_nuevo, liquidado }, ctx) => {
+
+            function padToNextLine(text, cols = 32) {
+                const len = text.length;
+                const resto = len % cols;
+
+                if (resto === 0) return text;
+
+                return text + " ".repeat(cols - resto);
+            }
+
+            try {
+
+                const [[interes1]] = await connection.query(`
+                    SELECT SUM(interes - abono_interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                const [pagos] = await connection.query(`
+                    SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                    [idVenta]
+                );
+
+                let totalTicket = 0;
+                let abonoRecibido = abono;
+                
+                for (const item of pagos) {
+                    if (abonoRecibido <= 0) break;
+
+                    const interesPendiente = parseFloat(item.interes - item.abono_interes); 
+                    const capitalPendiente = parseFloat(item.cantidad - item.abono); 
+
+                    if (interesPendiente > 0) {
+                        const abonoParaInteres = Math.min(abonoRecibido, interesPendiente);
+
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono_interes = (abono_interes + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaInteres, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaInteres;
+                        totalTicket += abonoParaInteres;
+                        item.abono_interes += abonoParaInteres;
+                    }
+
+                    if (abonoRecibido <= 0) {
+                    
+                        continue;
+                    }
+
+                    if (capitalPendiente > 0) {
+                        const abonoParaCapital = Math.min(abonoRecibido, capitalPendiente);
+
+                        await connection.execute(
+                            `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                            [abonoParaCapital, item.idAbonoProgramado]
+                        );
+                        abonoRecibido -= abonoParaCapital;
+                        item.abono += abonoParaCapital; 
+                    }
+
+                    const totalAbonadoInteres = parseFloat(item.abono_interes);
+                    console.log("Total abonado interes: ", totalAbonadoInteres);
+
+                    const totalAbonadoCapital = parseFloat(item.abono);
+
+                    if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
+                        await connection.execute(
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                            [mazatlanHora(), item.idAbonoProgramado]
+                        );
+                    }
+                }
+
+                const [[interes]] = await connection.query(`
+                    SELECT SUM(interes - abono_interes) AS interes FROM abonos_programados WHERE STATUS = 1 AND idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                const abonoInsert = await connection.execute(
+                    `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = ?, usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?`,
+                    [idVenta, abono, saldo_anterior, saldo_nuevo, mazatlanHora(), ctx.usuario.idUsuario,(interes1.interes), interes.interes]
+                )
+
+                if(liquidado === 1){
+                    const [abonos_programados] = await connection.query( 
+                        `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idVenta = ? AND pagado = 0 AND status = 1;`,
+                        [mazatlanHora(), idVenta]
+                    );
+                }
+
+                const [abonos_programados] = await connection.query(`
+                    SELECT COUNT(*) AS total_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0`, 
+                    [idVenta]
+                );
+
+                if(abonos_programados[0].total_pendiente === 0){
+                    await connection.execute(
+                        `UPDATE ventas SET status = 0 WHERE idVenta = ?;`,
+                        [idVenta]
+                    )
+                }
+
+                const [infoVenta]  = await connection.query(
+                    `   
+                       SELECT tipo, fecha, total FROM ventas WHERE idVenta = ?;
+                    `, [idVenta]
+                );
+
+                let diferencia = diffMonths(new Date(), infoVenta[0].fecha);
+
+                if(diferencia < 0) {
+                    diferencia = diferencia * -1;
+                }
+
+                diferencia = diferencia + 1;
+     
+                const [[pendiente]] = await connection.query(
+                    `   
+                       SELECT SUM(cantidad - abono) AS cantidad_pendiente, SUM(interes-abono_interes) AS interes_pendiente FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1;
+                    `, [idVenta]
+                );
+                
+                let descuento = 0;
+                
+                let totalPendiente = pendiente.cantidad_pendiente;
+
+                if(infoVenta[0].tipo === 2){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.15;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 5: 
+                            descuento = infoVenta[0].total * 0.05;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                } else if(infoVenta[0].tipo === 3){
+                    switch(diferencia){
+                        case 1:
+                            descuento = infoVenta[0].total * 0.275;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 2:
+                            descuento = infoVenta[0].total * 0.20;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 3:
+                            descuento = infoVenta[0].total * 0.18;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 4:
+                            descuento = infoVenta[0].total * 0.16;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 5:
+                            descuento = infoVenta[0].total * 0.14;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 6:
+                            descuento = infoVenta[0].total * 0.12;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        case 7:
+                            descuento = infoVenta[0].total * 0.10;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 8:
+                            descuento = infoVenta[0].total * 0.08;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 9:
+                            descuento = infoVenta[0].total * 0.06;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 10:
+                            descuento = infoVenta[0].total * 0.04;
+                            totalPendiente = totalPendiente - descuento; 
+                            break;
+                        case 11:
+                            descuento = infoVenta[0].total * 0.02;
+                            totalPendiente = totalPendiente - descuento;
+                            break;
+                        default: 
+                            break;
+                    }
+                }
+
+                const actualizar = await connection.execute(
+                    `UPDATE abonos SET liquidar = ?, saldo_nuevo = ? WHERE id = ?`,
+                    [liquidado === 1 ? 0.00 : Math.ceil(totalPendiente + pendiente.interes_pendiente), liquidado === 1 ? 0.00 : saldo_anterior - (abono - totalTicket), abonoInsert[0].insertId]
+                )
+
+                const [productos] = await connection.query(
+                    `   
+                        SELECT CONCAT(productos_venta.cantidad," X ", productos.descripcion) AS productos
+                            FROM ventas 
+                            INNER JOIN productos_venta ON ventas.idVenta = productos_venta.idVenta
+                            INNER JOIN productos ON productos_venta.idProducto = productos.idProducto
+                            WHERE ventas.idVenta = ?;
+                    `, [idVenta]
+                );
+
+                const [[cliente]] = await connection.query(
+                    `   
+                    SELECT  CONCAT(c.nombre, " ", c.aPaterno, " ", c.aMaterno) AS nombre
+                        FROM ventas v
+                        INNER JOIN clientes c ON v.idCliente = c.idCliente
+                        WHERE v.idVenta = ? LIMIT 1;
+                    `, [idVenta]
+                );
+
+                const productosString = productos
+                    .map(p => padToNextLine(String(p.productos)))
+                    .join("\n"); 
+
+                const saldoNuevo = liquidado === 1 ? 0.00 : saldo_anterior - (abono - totalTicket)
+               
+                const liquidada = liquidado === 1 ? 0.00 : Math.ceil(totalPendiente + pendiente.interes_pendiente);
+               
+                const ticketUrl = "https://res.cloudinary.com/dqh6utbju/image/upload/v1760036466/vnl14anlc53zwyxhfvmv.png";
+
+                const phone = "526691498401"
+
+                const msg = [
+                `Hola, *${cliente.nombre}*`,
+                `Hemos recibido correctamente tu pago de la venta *#${idVenta}* por *${formatPrice(abono)}*.`,
+                ``,
+                `- *Productos:* ${productosString}`,
+                `- *Saldo actual:* ${formatPrice(saldoNuevo)}`,
+                `- *Liquidas con:* ${formatPrice(liquidada)}`,
+                ``,
+                `Consulta tu ticket digital aquí:`,
+                `${ticketUrl}`,
+                ``,
+                `_Gracias por tu pago y por confiar en nosotros!_`
+                ].join('\n');
+
+                const msgEncoded = encodeURIComponent(msg);
+
+                return abonoInsert[0].insertId;
+
+
+            } catch (error) {
+                console.log(error);
+                
+                throw new GraphQLError("Error insertando venta.",{
+                    extensions:{
+                        code: "BAD_REQUEST",
+                        http: {
+                            "status" : 400
+                        }
+                    }
+                });
+            }
+        },
         cancelPayment: async(_, {idAbono}, ctx) => {
             try {
 
@@ -676,6 +986,85 @@ const paymentResolver = {
                 });
             }
         },
+        subidaDatos: async (_, { abonos }, ctx) => {
+            try {
+                for (const abono of abonos) {
+                    
+                    const abonoInsert = await connection.execute(
+                        `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = ?, usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?, liquidar = ?`,
+                        [abono.idVenta, abono.abono, abono.saldo_anterior, abono.saldo_nuevo, abono.fecha_reg, abono.usuario_reg, abono.interes_anterior, abono.interes_nuevo, abono.liquidar]
+                    )
+
+                    const [pagos] = await connection.query(`
+                        SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                        [abono.idVenta]
+                    );
+    
+                    let abonoRecibido = abono.abono;
+                    
+                    for (const item of pagos) {
+                        if (abonoRecibido <= 0) break;
+    
+                        const interesPendiente = parseFloat(item.interes - item.abono_interes); 
+                        const capitalPendiente = parseFloat(item.cantidad - item.abono); 
+    
+                        if (interesPendiente > 0) {
+                            const abonoParaInteres = Math.min(abonoRecibido, interesPendiente);
+    
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono_interes = (abono_interes + ?) WHERE idAbonoProgramado = ?;`,
+                                [abonoParaInteres, item.idAbonoProgramado]
+                            );
+                            abonoRecibido -= abonoParaInteres;
+                            item.abono_interes += abonoParaInteres;
+                        }
+    
+                        if (abonoRecibido <= 0) {
+                        
+                            continue;
+                        }
+    
+                        if (capitalPendiente > 0) {
+                            const abonoParaCapital = Math.min(abonoRecibido, capitalPendiente);
+    
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                                [abonoParaCapital, item.idAbonoProgramado]
+                            );
+                            abonoRecibido -= abonoParaCapital;
+                            item.abono += abonoParaCapital; 
+                        }
+    
+                        const totalAbonadoInteres = parseFloat(item.abono_interes);
+                        const totalAbonadoCapital = parseFloat(item.abono);
+
+                        if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
+                            await connection.execute(
+                                `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                                [abono.fecha_reg, item.idAbonoProgramado]
+                            );
+                        }
+                    }
+
+                    if(abono.liquidar === 0){
+                        await connection.execute(
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idVenta = ? AND pagado = 0;`,
+                            [abono.fecha_reg, abono.idVenta]
+                        );
+
+                        await connection.execute(
+                            `UPDATE ventas SET status = 0 WHERE idVenta = ?;`,
+                            [abono.idVenta]
+                        );
+                    }
+                }
+
+                return "Sexo anal"
+            } catch (error) {
+                console.log(error);
+                
+            }
+        }
     }
     
 };

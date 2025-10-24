@@ -46,6 +46,7 @@ const inventorySchema = `#graphql
         nota: String
         fecha: String
     }
+
     type Query {
         getPendingInventory(tipo: Int): [InventarioPendiente]
         getCategories: [Categoria]
@@ -53,7 +54,10 @@ const inventorySchema = `#graphql
         getProducts(categoria: Int, municipio: Int): [Producto]
         GetProductosInventarios: [ProductoInventario]
         getHistorialAjustes: [Ajuste]
+        getMunicipiosActivos: [Municipio!]!
+        getProductosPorMunicipio(idMunicipio: Int!): [ProductoResumen!]!
     }
+
     type Mutation {
         actualizarStockRosario(idProducto: Int!, nuevoStock: Int!, nota: String!): ResultadoMutation
         actualizarStockEscuinapa(idProducto: Int!, nuevoStock: Int!, nota: String!): ResultadoMutation
@@ -83,6 +87,13 @@ const inventorySchema = `#graphql
             min_stock_rosario: Int
             min_stock_escuinapa: Int
         ): UpdateProductoResponse
+
+        transferirProductos(
+            fromMunicipio: Int!
+            toMunicipio: Int!
+            items: [TransferItemInput!]!
+            nota: String
+        ): TransferenciaResult!
    
     }
     
@@ -105,6 +116,41 @@ const inventorySchema = `#graphql
         success: Boolean
         message: String
     }
+
+    type Municipio {
+        idMunicipio: Int!
+        nombre: String!
+    }
+
+    type ProductoResumen {
+        idProducto: Int!
+        nombre: String!
+        precio: Float!
+        img_producto: String
+        categoria: String
+        stock: Int!
+        min_stock: Int!
+    }    
+    
+    input TransferItemInput {
+        idProducto: Int!
+        cantidad: Int!
+    }
+
+    type TransferItemResult {
+        idProducto: Int!
+        fromStockAnterior: Int!
+        fromNuevoStock: Int!
+        toStockAnterior: Int!
+        toNuevoStock: Int!
+    }
+
+    type TransferenciaResult {
+        success: Boolean!
+        message: String!
+        items: [TransferItemResult!]!
+    }
+
     
 `
 export default inventorySchema;
