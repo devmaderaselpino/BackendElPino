@@ -288,7 +288,7 @@ const routedResolver = {
                             MAX(c.descripcion) AS descripcion,
 
                             MAX(ar.idRuta) AS idRuta,
-                            MAX(ar.nombre) AS nombreRuta,
+                            MAX(ar.nombre) AS nombre,
 
                             (SELECT COUNT(*)
                                 FROM abonos_programados ap
