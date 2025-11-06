@@ -77,7 +77,7 @@ const paymentResolver = {
                         JOIN ventas v ON a.idVenta = v.idVenta
                         JOIN clientes c ON v.idCliente = c.idCliente
                         WHERE a.tipo IN (1, 2, 3) AND a.status = 1
-                        ORDER BY a.fecha_reg DESC;
+                        ORDER BY a.id DESC;
                     `, 
                 );
                 
