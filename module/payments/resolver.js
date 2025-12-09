@@ -1064,6 +1064,92 @@ const paymentResolver = {
                 console.log(error);
                 
             }
+        },
+        subidaDatos2: async (_, { abonos, clientes }, ctx) => {
+            try {
+                for (const abono of abonos) {
+                    
+                    const abonoInsert = await connection.execute(
+                        `INSERT INTO abonos SET idVenta = ?, abono = ?, saldo_anterior = ?, saldo_nuevo = ?, fecha_reg = ?, usuario_reg = ?, tipo = 1, interes_anterior = ?, interes_nuevo = ?, liquidar = ?`,
+                        [abono.idVenta, abono.abono, abono.saldo_anterior, abono.saldo_nuevo, abono.fecha_reg, abono.usuario_reg, abono.interes_anterior, abono.interes_nuevo, abono.liquidar]
+                    )
+
+                    const [pagos] = await connection.query(`
+                        SELECT * FROM abonos_programados WHERE idVenta = ? AND pagado = 0 AND status = 1`, 
+                        [abono.idVenta]
+                    );
+    
+                    let abonoRecibido = abono.abono;
+                    
+                    for (const item of pagos) {
+                        if (abonoRecibido <= 0) break;
+    
+                        const interesPendiente = parseFloat(item.interes - item.abono_interes); 
+                        const capitalPendiente = parseFloat(item.cantidad - item.abono); 
+    
+                        if (interesPendiente > 0) {
+                            const abonoParaInteres = Math.min(abonoRecibido, interesPendiente);
+    
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono_interes = (abono_interes + ?) WHERE idAbonoProgramado = ?;`,
+                                [abonoParaInteres, item.idAbonoProgramado]
+                            );
+                            abonoRecibido -= abonoParaInteres;
+                            item.abono_interes += abonoParaInteres;
+                        }
+    
+                        if (abonoRecibido <= 0) {
+                        
+                            continue;
+                        }
+    
+                        if (capitalPendiente > 0) {
+                            const abonoParaCapital = Math.min(abonoRecibido, capitalPendiente);
+    
+                            await connection.execute(
+                                `UPDATE abonos_programados SET abono = (abono + ?) WHERE idAbonoProgramado = ?;`,
+                                [abonoParaCapital, item.idAbonoProgramado]
+                            );
+                            abonoRecibido -= abonoParaCapital;
+                            item.abono += abonoParaCapital; 
+                        }
+    
+                        const totalAbonadoInteres = parseFloat(item.abono_interes);
+                        const totalAbonadoCapital = parseFloat(item.abono);
+
+                        if (totalAbonadoInteres >= item.interes && totalAbonadoCapital >= item.cantidad) {
+                            await connection.execute(
+                                `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idAbonoProgramado = ?;`,
+                                [abono.fecha_reg, item.idAbonoProgramado]
+                            );
+                        }
+                    }
+
+                    if(abono.liquidar === 0){
+                        await connection.execute(
+                            `UPDATE abonos_programados SET pagado = 1, fecha_liquido = ? WHERE idVenta = ? AND pagado = 0;`,
+                            [abono.fecha_reg, abono.idVenta]
+                        );
+
+                        await connection.execute(
+                            `UPDATE ventas SET status = 0 WHERE idVenta = ?;`,
+                            [abono.idVenta]
+                        );
+                    }
+                }
+
+                for(const cliente of clientes){
+                    await connection.execute(
+                        `UPDATE asignacion_rutas SET orden = ? WHERE idCliente = ? AND status = 1;`,
+                        [cliente.orden, cliente.idCliente]
+                    );
+                }
+
+                return "Ahí fue."
+            } catch (error) {
+                console.log(error);
+                
+            }
         }
     }
     

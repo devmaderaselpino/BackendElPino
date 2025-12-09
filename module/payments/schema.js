@@ -57,6 +57,12 @@ const paymentSchema = `#graphql
         liquidar: Float
     }
 
+    input EnrutadoSubida {
+        idCliente: Int
+        idRuta: Int
+        orden: Int
+    }
+
     type SalePayment {
         id: Int
         idVenta: Int
@@ -102,6 +108,7 @@ const paymentSchema = `#graphql
         cancelPayment(idAbono: Int): String
         insertPagoViejo(abono: Float, idVenta: Int): String
         subidaDatos(abonos: [AbonoApp]): String
+        subidaDatos2(abonos: [AbonoApp], clientes: [EnrutadoSubida]): String
     }
     
     
