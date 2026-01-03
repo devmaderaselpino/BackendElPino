@@ -2,6 +2,7 @@ import connection from "../../Config/connectionSQL.js";
 import { GraphQLError } from "graphql";
 import { addDay, weekEnd, weekStart, format, addMonth, diffMonths } from "@formkit/tempo";
 import mazatlanHora from "../../functions/MazatlanHora.js";
+import firsSchedulePayment from "../../functions/firstSchedulePayment.js";
 
 const salesResolver = {
     Query : {
@@ -172,10 +173,7 @@ const salesResolver = {
 
                     `, 
                 );
-
-                console.log(ventas);
-                
-                
+ 
                 return ventas;
             } catch (error) {
                 console.log(error);
@@ -678,7 +676,12 @@ const salesResolver = {
                     }
                 }
 
-                let fecha_programada = format(weekStart(addDay(new Date(), 7)), "YYYY-MM-DD", "en");
+                console.log(mazatlanHora());
+                
+
+                let datePlus45 = addDay(new Date(), 45);
+
+                let fechaProxima = firsSchedulePayment(datePlus45);
 
                 const pagoRedondeado = Math.ceil((total - abono) / plazo);
 
@@ -689,16 +692,20 @@ const salesResolver = {
                 const ultimoPago = pagoRedondeado - diferencia;
             
                 if(tipo !== 1){
-                    for( let index = 1; index <= plazo; index++ ){
-                        fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
-    
+
+                    for( let index = 1; index <= plazo; index++ ){ 
+                        if(index === 1){
+                            fechaProxima = format(fechaProxima, "YYYY-MM-DD", "en");
+                        }else{
+                            fechaProxima = format(addMonth(fechaProxima), "YYYY-MM-DD", "en");
+                        } 
+                        
                         const abonoProgramados = await connection.execute(
                             `
                                 INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                            `,[venta[0].insertId, idCliente, index, index === plazo ? ultimoPago : pagoRedondeado, fecha_programada]
+                            `,[venta[0].insertId, idCliente, index, index === plazo ? ultimoPago : pagoRedondeado, fechaProxima]
                             
                         );
-                        
                     }
                 }
 
@@ -861,13 +868,30 @@ const salesResolver = {
                     }
 
                     if(infoInicial.restante > 0){
-                        for( let index = 0; index < plazo; index++ ){
-                            fecha_programada = format(addMonth(fecha_programada), "YYYY-MM-DD", "en");
-        
+
+                        const pagoRedondeado = Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo);
+
+                        const totalRedondeado = pagoRedondeado * plazo;
+
+                        const diferencia = totalRedondeado - (infoInicial.restante - abonos.total_enganche);
+
+                        const ultimoPago = pagoRedondeado - diferencia;
+
+                        let prueba = addDay(infoInicial.fecha, 45);
+
+                        let fechaProxima = firsSchedulePayment(prueba);
+
+                        for( let index = 1; index <= plazo; index++ ){
+                            if(index === 1){
+                                fechaProxima = format(fechaProxima, "YYYY-MM-DD", "en");
+                            }else{
+                                fechaProxima = format(addMonth(fechaProxima), "YYYY-MM-DD", "en");
+                            } 
+
                             const abonoProgramados = await connection.execute(
                                 `
                                     INSERT INTO abonos_programados SET idVenta = ?, idCliente = ?, num_pago = ?, cantidad = ?, fecha_programada = ?; 
-                                `,[idVenta, infoInicial.idCliente, index + 1, Math.ceil((infoInicial.restante - abonos.total_enganche) / plazo), fecha_programada]
+                                `,[idVenta, infoInicial.idCliente, index, index === plazo ? ultimoPago : pagoRedondeado, fechaProxima]
                                 
                             );
                         }
